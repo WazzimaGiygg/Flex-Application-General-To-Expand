@@ -1,0 +1,75 @@
+Documentação Técnica: NotepadFlex - Editor de Texto em JSON
+
+1. Introdução Estratégica e Contextualização
+
+O NotepadFlex transcende a definição de um utilitário de escrita convencional, posicionando-se como uma arquitetura base modular desenhada para a nova geração de editores de texto estruturados. A sua relevância estratégica reside na transição deliberada do paradigma de armazenamento em texto simples para a persistência de dados no formato JSON. Esta abordagem catalisa a transformação de um ficheiro comum num objeto de dados estruturado, permitindo que a informação seja interoperável e facilmente consumida por outros sistemas ou processos automatizados. Ao utilizar verbos analíticos para dissecar esta escolha, observamos que esta metodologia otimiza a escalabilidade da aplicação e assegura uma integridade de dados superior, convertendo metadados em ativos informativos. Esta base sólida direciona-nos para uma análise profunda das especificações técnicas que sustentam a sua arquitetura.
+
+2. Arquitetura do Sistema e Dependências Core
+
+A arquitetura do NotepadFlex privilegia o ecossistema PyQt5 para mitigar o overhead de performance, garantindo uma interface gráfica (GUI) robusta e simultaneamente leve. A seleção das dependências foi guiada por critérios de eficiência operacional e integração nativa com o sistema operativo.
+
+As classes fundamentais do sistema foram desenhadas sob o princípio da responsabilidade única (SOLID):
+
+* SimpleTextEditor: Atua como o motor central da aplicação, gerindo o ciclo de vida do editor, a manipulação do buffer de texto e a lógica de persistência.
+* StartupDialog: Isola a lógica de pré-configuração e interação inicial, garantindo que o ambiente de edição principal permaneça focado apenas na sua função primária.
+
+Componentes Tecnológicos Vitais:
+
+* PyQt5 (QtWidgets, QtCore, QtGui): Fornece o arcabouço para a construção da interface, gestão de eventos e renderização visual. Tecnicamente, o sistema é identificado no QApplication como "Editor Simples", embora a marca comercial e de interface seja "NotepadFlex".
+* sys: Garante o controlo de baixo nível sobre a execução do processo e argumentos do sistema.
+* json: Atua como o motor de serialização e desserialização, transformando estruturas de dados Python em ficheiros estruturados.
+* os: Essencial para a gestão de extensões .json e validação rigorosa de caminhos no sistema de ficheiros local.
+* datetime: Responsável pela geração precisa de timestamps (marcas temporais) essenciais para a integridade dos metadados.
+
+3. Análise Funcional e Experiência do Utilizador
+
+O NotepadFlex integra funcionalidades que elevam a experiência de edição para um patamar de controlo técnico refinado. A implementação de ferramentas como a localização avançada e a gestão de visualização permite que o utilizador manipule grandes volumes de texto com precisão cirúrgica.
+
+Funcionalidade	Impacto na Produtividade do Utilizador
+Localizar e Substituir	Automatiza a refatoração de termos, reduzindo o erro humano em documentos extensos.
+Desfazer/Refazer	Implementa uma gestão de pilha de estados (undo stack), permitindo a reversão segura de operações.
+Moldagem de Texto	Otimiza a legibilidade sem comprometer a estrutura original dos dados guardados.
+Zoom Ajustável	Garante a adaptação ergonómica a diferentes resoluções de ecrã e necessidades visuais.
+
+A "Moldagem de texto" (Word Wrap) e o "Zoom ajustável" são pilares da legibilidade técnica, permitindo a análise de logs ou código sem a necessidade de deslocação horizontal constante. Esta eficiência operacional é consolidada através de um sistema de atalhos de teclado de resposta rápida.
+
+4. Guia de Operação e Atalhos de Teclado
+
+Para sustentar um fluxo de trabalho de alta performance, o NotepadFlex utiliza uma interface orientada à eficiência, onde as operações críticas são executadas sem interrupção via comandos de teclado:
+
+* Ctrl+N (Novo Ficheiro): Reinicializa o estado do sistema, definindo o current_file como None e o sinalizador is_modified como False, limpando o buffer para uma nova sessão.
+* Ctrl+O (Abrir): Invoca o motor de desserialização para interpretar a estrutura JSON e popular a área de texto.
+* Ctrl+S (Guardar): Aciona a serialização dos dados para o formato JSON, consolidando o conteúdo textual e os metadados no armazenamento físico.
+* Ctrl+F (Localizar): Ativa o algoritmo de pesquisa de strings no campo de texto ativo.
+* Ctrl+H (Substituir): Executa a substituição parametrizada, garantindo a consistência das alterações em todo o documento.
+
+A eficácia destes comandos assegura que o utilizador gere ficheiros de dados ricos, onde a estrutura lógica é preservada de forma transparente.
+
+5. Estrutura de Dados e Persistência em JSON
+
+A decisão de design de incluir metadados é o que distingue o NotepadFlex dos editores .txt rudimentares. A contagem de caracteres e os timestamps (Criação e Modificação) não são meras informações; funcionam como um checksum simplificado e um rasto de auditoria para a integridade dos dados durante a desserialização.
+
+Abaixo, ilustra-se a hierarquia lógica dos dados guardados no ficheiro:
+
+Documento (Raiz)
+    Metadados
+        Data de Criação (Timestamp ISO)
+        Última Modificação (Timestamp ISO)
+        Contagem de Caracteres (Integridade de Volume)
+    Conteúdo
+        Texto Principal (String Serializada)
+
+
+Esta arquitetura permite que sistemas externos validem a versão e a magnitude do ficheiro antes mesmo de processarem o conteúdo textual, oferecendo um potencial de expansão sem precedentes para fluxos de trabalho automatizados.
+
+6. Roadmap de Desenvolvimento e Conclusão
+
+O estado atual do NotepadFlex representa uma versão base estável, pronta para evoluir conforme as exigências do utilizador. A modularidade do código permite a inserção imediata de novas capacidades técnicas.
+
+Vetores de Evolução Futura:
+
+1. Implementação de Temas Dinâmicos: Suporte para personalização da interface e integração de "Modo Noturno".
+2. Suporte para Markdown: Renderização em tempo real de sintaxe técnica para documentação profissional.
+3. Encriptação de Ficheiros JSON: Integração de bibliotecas criptográficas para proteger metadados sensíveis que, pela natureza do formato JSON, ficariam expostos em texto simples.
+
+Este documento estabelece as diretrizes para a operação e futura expansão do NotepadFlex, uma ferramenta desenhada por engenheiros para utilizadores que exigem estrutura e fiabilidade na gestão de dados textuais.
