@@ -255,6 +255,7 @@ class SimpleTextEditor(QMainWindow):
         
         # Barra de localização (inicialmente oculta)
         self.search_bar = QWidget()
+        self.search_bar.setObjectName("search-bar")
         search_layout = QHBoxLayout(self.search_bar)
         search_layout.setContentsMargins(5, 5, 5, 5)
         
@@ -265,6 +266,7 @@ class SimpleTextEditor(QMainWindow):
         
         self.replace_input = QLineEdit()
         self.replace_input.setPlaceholderText("Substituir por...")
+        self.replace_input.returnPressed.connect(self.replace_current)
         self.replace_input.hide()  # Inicialmente oculto
         
         btn_find_prev = QPushButton("⬆")
@@ -277,13 +279,16 @@ class SimpleTextEditor(QMainWindow):
         btn_find_next.setMaximumWidth(30)
         btn_find_next.clicked.connect(self.find_next)
         
-        btn_replace = QPushButton("Substituir")
-        btn_replace.hide()
-        btn_replace.clicked.connect(self.replace_current)
+        # Tornar os botões atributos da classe
+        self.btn_replace = QPushButton("Substituir")
+        self.btn_replace.setToolTip("Substituir ocorrência atual")
+        self.btn_replace.hide()
+        self.btn_replace.clicked.connect(self.replace_current)
         
-        btn_replace_all = QPushButton("Substituir Tudo")
-        btn_replace_all.hide()
-        btn_replace_all.clicked.connect(self.replace_all)
+        self.btn_replace_all = QPushButton("Substituir Tudo")
+        self.btn_replace_all.setToolTip("Substituir todas as ocorrências")
+        self.btn_replace_all.hide()
+        self.btn_replace_all.clicked.connect(self.replace_all)
         
         btn_close_search = QPushButton("✕")
         btn_close_search.setToolTip("Fechar")
@@ -295,8 +300,8 @@ class SimpleTextEditor(QMainWindow):
         search_layout.addWidget(btn_find_prev)
         search_layout.addWidget(btn_find_next)
         search_layout.addWidget(self.replace_input)
-        search_layout.addWidget(btn_replace)
-        search_layout.addWidget(btn_replace_all)
+        search_layout.addWidget(self.btn_replace)
+        search_layout.addWidget(self.btn_replace_all)
         search_layout.addStretch()
         search_layout.addWidget(btn_close_search)
         
@@ -375,7 +380,7 @@ class SimpleTextEditor(QMainWindow):
             background-color: #34495e;
             color: white;
         }
-        .search-bar {
+        #search-bar {
             background-color: #ecf0f1;
             border-top: 1px solid #bdc3c7;
         }
@@ -632,27 +637,27 @@ Divirta-se! 🎉
         """Mostrar barra de localização"""
         self.search_bar.show()
         self.search_input.setFocus()
+        # Esconder controles de substituição
         self.replace_input.hide()
-        self.find_buttons_show()
+        self.btn_replace.hide()
+        self.btn_replace_all.hide()
     
     def show_replace(self):
         """Mostrar barra de substituição"""
         self.search_bar.show()
+        self.search_input.setFocus()
+        # Mostrar controles de substituição
         self.replace_input.show()
-        self.find_buttons_show()
-        self.find_buttons_show(True)
+        self.btn_replace.show()
+        self.btn_replace_all.show()
     
     def hide_search(self):
         """Ocultar barra de localização"""
         self.search_bar.hide()
         self.search_input.clear()
         self.replace_input.clear()
-        self.replace_input.hide()
-    
-    def find_buttons_show(self, replace=False):
-        """Mostrar botões apropriados"""
-        # Implementar se necessário
-        pass
+        # Limpar destaques
+        self.text_area.setExtraSelections([])
     
     def on_search_text_changed(self, text):
         """Quando o texto de busca muda"""
@@ -662,25 +667,27 @@ Divirta-se! 🎉
     def highlight_all(self):
         """Destacar todas as ocorrências"""
         # Limpar seleções existentes
-        cursor = self.text_area.textCursor()
-        cursor.clearSelection()
-        self.text_area.setTextCursor(cursor)
-        
-        # Criar formato de destaque
         extra_selections = []
         
         if self.search_text:
+            # Criar formato de destaque
+            highlight_format = QTextCharFormat()
+            highlight_format.setBackground(QColor(255, 255, 0, 100))
+            
             # Procurar todas as ocorrências
             document = self.text_area.document()
             cursor = QTextCursor(document)
             
-            while not cursor.isNull() and not cursor.atEnd():
+            # Usar find() em loop para encontrar todas as ocorrências
+            while True:
                 cursor = document.find(self.search_text, cursor)
-                if not cursor.isNull():
-                    selection = QTextEdit.ExtraSelection()
-                    selection.cursor = cursor
-                    selection.format.setBackground(QColor(255, 255, 0, 100))
-                    extra_selections.append(selection)
+                if cursor.isNull():
+                    break
+                
+                selection = QTextEdit.ExtraSelection()
+                selection.cursor = cursor
+                selection.format = highlight_format
+                extra_selections.append(selection)
         
         self.text_area.setExtraSelections(extra_selections)
     
@@ -689,7 +696,15 @@ Divirta-se! 🎉
         if not self.search_text:
             return
         
+        # Verificar se já há uma seleção
         cursor = self.text_area.textCursor()
+        
+        # Se há seleção e é igual ao texto procurado, avançar o cursor
+        if cursor.hasSelection() and cursor.selectedText() == self.search_text:
+            cursor.movePosition(QTextCursor.NextCharacter)
+            self.text_area.setTextCursor(cursor)
+        
+        # Procurar próxima ocorrência
         found = self.text_area.find(self.search_text)
         
         if not found:
@@ -702,17 +717,21 @@ Divirta-se! 🎉
                 self.status_bar.showMessage("Início do documento alcançado", 3000)
             else:
                 self.status_bar.showMessage(f"Texto '{self.search_text}' não encontrado", 3000)
+                return False
+        
+        return True
     
     def find_previous(self):
         """Encontrar ocorrência anterior"""
         if not self.search_text:
             return
         
-        cursor = self.text_area.textCursor()
+        # Procurar ocorrência anterior
         found = self.text_area.find(self.search_text, QTextDocument.FindBackward)
         
         if not found:
             # Ir ao final
+            cursor = self.text_area.textCursor()
             cursor.movePosition(QTextCursor.End)
             self.text_area.setTextCursor(cursor)
             found = self.text_area.find(self.search_text, QTextDocument.FindBackward)
@@ -721,6 +740,9 @@ Divirta-se! 🎉
                 self.status_bar.showMessage("Final do documento alcançado", 3000)
             else:
                 self.status_bar.showMessage(f"Texto '{self.search_text}' não encontrado", 3000)
+                return False
+        
+        return True
     
     def replace_current(self):
         """Substituir ocorrência atual"""
@@ -728,30 +750,58 @@ Divirta-se! 🎉
             return
         
         cursor = self.text_area.textCursor()
+        
+        # Verificar se há uma seleção e se é igual ao texto procurado
         if cursor.hasSelection() and cursor.selectedText() == self.search_text:
+            # Substituir o texto selecionado
             cursor.insertText(self.replace_input.text())
+            self.is_modified = True
+            self.update_window_title()
+            
+            # Procurar próxima ocorrência
             self.find_next()
+        else:
+            # Se não há seleção válida, procurar a próxima
+            if self.find_next():
+                # Se encontrou, chama novamente para substituir
+                self.replace_current()
     
     def replace_all(self):
         """Substituir todas as ocorrências"""
         if not self.search_text:
             return
         
+        # Salvar posição atual do cursor
+        original_cursor = self.text_area.textCursor()
+        
+        # Iniciar bloco de edição para poder desfazer todas as substituições de uma vez
         cursor = self.text_area.textCursor()
         cursor.beginEditBlock()
         
-        count = 0
+        # Ir para o início do documento
         cursor.movePosition(QTextCursor.Start)
         self.text_area.setTextCursor(cursor)
         
+        count = 0
+        replace_text = self.replace_input.text()
+        
+        # Substituir todas as ocorrências
         while self.text_area.find(self.search_text):
             cursor = self.text_area.textCursor()
-            cursor.insertText(self.replace_input.text())
+            cursor.insertText(replace_text)
             count += 1
         
         cursor.endEditBlock()
         
-        QMessageBox.information(self, "Substituir", f"Foram substituídas {count} ocorrências.")
+        # Restaurar cursor original
+        self.text_area.setTextCursor(original_cursor)
+        
+        if count > 0:
+            self.is_modified = True
+            self.update_window_title()
+            QMessageBox.information(self, "Substituir", f"Foram substituídas {count} ocorrências.")
+        else:
+            QMessageBox.information(self, "Substituir", f"Nenhuma ocorrência de '{self.search_text}' encontrada.")
     
     # ========== FUNÇÕES DE EXIBIÇÃO ==========
     
@@ -832,6 +882,7 @@ Divirta-se! 🎉
         """
         
         QMessageBox.about(self, "Sobre o Editor Simples", about_text)
+
 
 class StartupDialog(QDialog):
     """Diálogo inicial com opções"""
@@ -919,11 +970,13 @@ class StartupDialog(QDialog):
         layout.addWidget(btn_exit)
         
         self.setLayout(layout)
+        self.open_file_requested = False
     
     def open_file(self):
         """Abrir arquivo diretamente"""
-        self.accept()
         self.open_file_requested = True
+        self.accept()
+
 
 def main():
     app = QApplication(sys.argv)
@@ -933,10 +986,13 @@ def main():
     dialog = StartupDialog()
     if dialog.exec_() == QDialog.Accepted:
         editor = SimpleTextEditor()
+        if dialog.open_file_requested:
+            editor.open_file()
         editor.show()
         sys.exit(app.exec_())
     else:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()
