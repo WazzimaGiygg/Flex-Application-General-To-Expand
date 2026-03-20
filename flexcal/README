@@ -1,0 +1,61 @@
+Relatório Técnico de Projeto: Calculadora Multi-Modo (README.md)
+
+1. Visão Geral e Propósito do Sistema
+
+O desenvolvimento de ferramentas de cálculo eficientes exige uma fundação que harmonize a precisão algorítmica com uma interface intuitiva e altamente extensível. O projeto "Calculadora Multi-Modo" foi concebido sob esta premissa, utilizando a linguagem Python e o framework PyQt5 para estabelecer uma base sólida para interfaces de utilizador de classe profissional. A arquitetura do sistema é estrategicamente modular; a integração nativa de módulos como math e random não é apenas uma conveniência, mas uma prova de conceito para uma estrutura tipo plugin, onde novas capacidades de cálculo podem ser acopladas sem reestruturação do núcleo.
+
+O propósito central deste repositório é oferecer uma solução que transcende a aritmética simples, integrando persistência de dados via JSON e uma gestão robusta de histórico. Ao consolidar cálculos matemáticos avançados com um registo auditável de operações, o sistema posiciona-se como um assistente de produtividade fiável para contextos técnicos. Esta abordagem garante que o fluxo de trabalho do utilizador seja preservado, preparando o terreno para uma análise detalhada da arquitetura de classes que sustenta estas funcionalidades.
+
+2. Arquitetura de Dados e Estrutura de Classes
+
+A adoção dos princípios de Programação Orientada a Objetos (POO) é fundamental para garantir a manutenibilidade e a escalabilidade do software a longo prazo. Através da encapsulação de responsabilidades em classes distintas, o sistema minimiza o acoplamento, permitindo que evoluções na interface gráfica ou na lógica de persistência sejam implementadas de forma isolada e segura.
+
+A rastreabilidade total das operações é garantida pela classe HistoryEntry, que estrutura cada interação através dos seguintes atributos técnicos:
+
+* expression: Cadeia de caracteres que armazena a operação matemática bruta inserida pelo utilizador.
+* result: O valor numérico ou output final gerado após o processamento lógico.
+* mode: Metadado que identifica o contexto operacional (ex: aritmético, científico, estocástico) no momento do cálculo.
+* timestamp: Registo temporal automático, capturado no momento da instância, assegurando a ordem cronológica e integridade do histórico.
+
+A orquestração da interface recai sobre a classe Calculator, que herda de QMainWindow. A escolha da QMainWindow em detrimento de um simples QWidget é deliberada: esta classe fornece a infraestrutura necessária para funcionalidades padrão de software desktop profissional, como barras de menu, áreas de status e a gestão de múltiplos widgets centrais, elementos essenciais para uma aplicação "Multi-Modo". O ciclo de vida da aplicação é gerido pela função main, que inicializa o QApplication, garantindo uma experiência de desktop nativa e fluida.
+
+3. Funcionalidades e Capacidades Operacionais
+
+As capacidades operacionais deste sistema foram desenhadas para elevar a produtividade do utilizador final, transformando uma ferramenta de cálculo num assistente flexível capaz de lidar com fluxos de trabalho complexos.
+
+O diferencial analítico reside na capacidade de processamento multi-contexto. Ao importar módulos especializados, a calculadora expande o seu domínio para além das quatro operações básicas, permitindo cálculos trigonométricos e logarítmicos avançados (via math) e a implementação de lógica estocástica para simulações ou geração de dados (via random).
+
+A tabela abaixo sintetiza os componentes lógicos e o seu impacto direto na experiência do utilizador:
+
+Componente	Descrição Técnica	Impacto na Experiência do Utilizador
+Gestão de Histórico	Estruturação de dados via HistoryEntry com registo temporal.	Permite a auditoria não destrutiva de cálculos complexos e a recuperação de resultados anteriores.
+Núcleo Multi-Modo	Integração de bibliotecas científicas (math, random) no motor de execução.	Elimina a dependência de ferramentas externas ou tabelas de referência para funções trigonométricas e estatísticas.
+Interface PyQt5	Implementação baseada no framework Qt para gestão de janelas e eventos.	Proporciona uma resposta visual imediata e uma navegação consistente com os padrões de design de sistemas operativos modernos.
+Persistência JSON	Preparação de objetos para serialização e armazenamento estruturado.	Garante a continuidade do trabalho, permitindo que o histórico de sessões anteriores seja preservado e consultado.
+
+4. Stack Tecnológica e Dependências
+
+A seleção da stack tecnológica reflete um compromisso com a robustez e a facilidade de integração. O Python foi escolhido como linguagem base pela sua versatilidade e excelente suporte a bibliotecas de processamento de dados, enquanto o ecossistema Qt oferece a maturidade necessária para interfaces gráficas complexas.
+
+As dependências e módulos utilizados no projeto "Calculadora Multi-Modo" são:
+
+* sys: Gestão de parâmetros de sistema e controlo do ciclo de vida da aplicação.
+* json: Serialização de dados para assegurar a persistência entre sessões de utilização.
+* math: Biblioteca padrão para operações de alta precisão (trigonometria, logaritmos, constantes).
+* random: Implementação de funções para geração de números pseudo-aleatórios e lógica estocástica.
+* datetime: Gestão e formatação de carimbos temporais para o sistema de histórico.
+* PyQt5: Framework principal de interface, utilizando especificamente as bibliotecas QtWidgets para elementos visuais, QtCore para lógica de sinais/slots e QtGui para renderização e fontes.
+
+5. Guia de Instalação e Execução
+
+Para garantir o funcionamento ideal do sistema, recomenda-se a utilização de um ambiente virtual (venv), uma prática padrão na engenharia de software para isolar dependências e evitar conflitos entre projetos.
+
+Após a configuração do ambiente Python, a instalação e execução devem seguir os passos abaixo através do terminal:
+
+Criação e ativação do ambiente virtual (opcional mas recomendado): python -m venv venv source venv/bin/activate (Linux/macOS) ou venv\Scripts\activate (Windows)
+
+Instalação da dependência principal: pip install PyQt5
+
+Execução da aplicação: python calcflex.txt
+
+A arquitetura aqui descrita serve como um modelo sólido para o desenvolvimento de ferramentas desktop, convidando os engenheiros a explorar e expandir estas capacidades para responder a novos desafios técnicos no domínio do cálculo computacional.
