@@ -2709,6 +2709,7 @@ class EditorImagem:
             "  - Especiais: Transparência, Pixelizar, Mosaico, Ruído\n\n"
             "Desenvolvido com Python, Tkinter e Pillow\n\n"
             "© 2024 PaintWazzima Studios"
+            " Relatório: JAoI5mcT1wfHm8MSLOLl"
         )
         messagebox.showinfo("Sobre o PaintWazzima", sobre_text)
     
