@@ -9,10 +9,11 @@ from PyQt5.QtGui import *
 
 class HistoryEntry:
     """Classe para representar uma entrada no histórico"""
-    def __init__(self, expression, result, mode, timestamp=None):
+    def __init__(self, expression, result, mode, timestamp=None, category="normal"):
         self.expression = expression
         self.result = result
         self.mode = mode
+        self.category = category
         self.timestamp = timestamp or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     
     def to_dict(self):
@@ -20,45 +21,957 @@ class HistoryEntry:
             'expression': self.expression,
             'result': self.result,
             'mode': self.mode,
+            'category': self.category,
             'timestamp': self.timestamp
         }
     
     @classmethod
     def from_dict(cls, data):
-        return cls(data['expression'], data['result'], data['mode'], data['timestamp'])
+        return cls(data['expression'], data['result'], data['mode'], 
+                   data['timestamp'], data.get('category', 'normal'))
 
-class Calculator(QMainWindow):
+class FunctionPlotter(QMainWindow):
+    """Janela para plotar funções (versão simplificada sem matplotlib)"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Calculadora de Funções")
+        self.setGeometry(200, 200, 500, 400)
+        
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        
+        # Instruções
+        instructions = QLabel(
+            "Esta calculadora avalia funções em pontos específicos.\n"
+            "Use as funções: sin, cos, tan, log, exp, sqrt"
+        )
+        instructions.setWordWrap(True)
+        instructions.setStyleSheet("background-color: #e9ecef; padding: 10px; border-radius: 5px;")
+        layout.addWidget(instructions)
+        
+        # Entrada da função
+        func_layout = QHBoxLayout()
+        func_layout.addWidget(QLabel("f(x) ="))
+        self.function_input = QLineEdit()
+        self.function_input.setPlaceholderText("Ex: sin(x) + cos(x)")
+        func_layout.addWidget(self.function_input)
+        layout.addLayout(func_layout)
+        
+        # Entrada do valor de x
+        x_layout = QHBoxLayout()
+        x_layout.addWidget(QLabel("x ="))
+        self.x_value = QLineEdit()
+        self.x_value.setPlaceholderText("Digite o valor de x")
+        x_layout.addWidget(self.x_value)
+        
+        btn_calc = QPushButton("Calcular")
+        btn_calc.clicked.connect(self.calculate_point)
+        x_layout.addWidget(btn_calc)
+        layout.addLayout(x_layout)
+        
+        # Resultado
+        self.result_label = QLabel("")
+        self.result_label.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #28a745;
+                padding: 15px;
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 5px;
+                min-height: 50px;
+            }
+        """)
+        self.result_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.result_label)
+        
+        # Tabela de valores
+        table_group = QGroupBox("Tabela de Valores")
+        table_layout = QVBoxLayout()
+        
+        # Controles para tabela
+        table_controls = QHBoxLayout()
+        table_controls.addWidget(QLabel("De:"))
+        self.start_value = QLineEdit("-5")
+        self.start_value.setMaximumWidth(60)
+        table_controls.addWidget(self.start_value)
+        
+        table_controls.addWidget(QLabel("Até:"))
+        self.end_value = QLineEdit("5")
+        self.end_value.setMaximumWidth(60)
+        table_controls.addWidget(self.end_value)
+        
+        table_controls.addWidget(QLabel("Passo:"))
+        self.step_value = QLineEdit("1")
+        self.step_value.setMaximumWidth(60)
+        table_controls.addWidget(self.step_value)
+        
+        btn_table = QPushButton("Gerar Tabela")
+        btn_table.clicked.connect(self.generate_table)
+        table_controls.addWidget(btn_table)
+        
+        table_layout.addLayout(table_controls)
+        
+        # Tabela
+        self.table_widget = QTableWidget()
+        self.table_widget.setColumnCount(2)
+        self.table_widget.setHorizontalHeaderLabels(["x", "f(x)"])
+        table_layout.addWidget(self.table_widget)
+        
+        table_group.setLayout(table_layout)
+        layout.addWidget(table_group)
+    
+    def calculate_point(self):
+        """Calcular função em um ponto"""
+        try:
+            func_str = self.function_input.text()
+            x = float(self.x_value.text())
+            
+            if not func_str:
+                QMessageBox.warning(self, "Aviso", "Digite uma função!")
+                return
+            
+            # Avaliar função
+            result = self.evaluate_function(func_str, x)
+            self.result_label.setText(f"f({x}) = {result:.6f}")
+            
+        except ValueError:
+            QMessageBox.warning(self, "Erro", "Digite um valor válido para x!")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao calcular: {str(e)}")
+    
+    def generate_table(self):
+        """Gerar tabela de valores"""
+        try:
+            func_str = self.function_input.text()
+            start = float(self.start_value.text())
+            end = float(self.end_value.text())
+            step = float(self.step_value.text())
+            
+            if not func_str:
+                QMessageBox.warning(self, "Aviso", "Digite uma função!")
+                return
+            
+            if step <= 0:
+                QMessageBox.warning(self, "Aviso", "O passo deve ser positivo!")
+                return
+            
+            # Gerar valores
+            x_values = []
+            y_values = []
+            x = start
+            while x <= end:
+                try:
+                    y = self.evaluate_function(func_str, x)
+                    x_values.append(x)
+                    y_values.append(y)
+                except:
+                    y_values.append("Erro")
+                x += step
+            
+            # Atualizar tabela
+            self.table_widget.setRowCount(len(x_values))
+            for i, (x, y) in enumerate(zip(x_values, y_values)):
+                self.table_widget.setItem(i, 0, QTableWidgetItem(f"{x:.3f}"))
+                self.table_widget.setItem(i, 1, QTableWidgetItem(f"{y:.6f}" if isinstance(y, float) else y))
+            
+        except ValueError:
+            QMessageBox.warning(self, "Erro", "Digite valores válidos para os intervalos!")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao gerar tabela: {str(e)}")
+    
+    def evaluate_function(self, func_str, x):
+        """Avaliar função com segurança"""
+        # Dicionário de funções seguras
+        safe_dict = {
+            'x': x,
+            'sin': math.sin, 'cos': math.cos, 'tan': math.tan,
+            'asin': math.asin, 'acos': math.acos, 'atan': math.atan,
+            'sinh': math.sinh, 'cosh': math.cosh, 'tanh': math.tanh,
+            'exp': math.exp, 'log': math.log, 'log10': math.log10,
+            'sqrt': math.sqrt, 'abs': abs,
+            'pi': math.pi, 'e': math.e
+        }
+        
+        # Substituir operadores
+        expr = func_str.replace('^', '**')
+        
+        return eval(expr, {"__builtins__": {}}, safe_dict)
+
+class UnitConverter(QDialog):
+    """Conversor de unidades"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Conversor de Unidades")
+        self.setGeometry(300, 300, 500, 400)
+        
+        layout = QVBoxLayout()
+        
+        # Categorias de unidades
+        self.category_combo = QComboBox()
+        self.category_combo.addItems([
+            "Comprimento", "Massa", "Temperatura", "Área", 
+            "Volume", "Velocidade", "Tempo", "Energia"
+        ])
+        self.category_combo.currentTextChanged.connect(self.update_units)
+        layout.addWidget(self.category_combo)
+        
+        # Unidades de origem e destino
+        units_layout = QHBoxLayout()
+        
+        self.from_combo = QComboBox()
+        self.to_combo = QComboBox()
+        
+        units_layout.addWidget(QLabel("De:"))
+        units_layout.addWidget(self.from_combo)
+        units_layout.addWidget(QLabel("Para:"))
+        units_layout.addWidget(self.to_combo)
+        
+        layout.addLayout(units_layout)
+        
+        # Valor de entrada
+        input_layout = QHBoxLayout()
+        input_layout.addWidget(QLabel("Valor:"))
+        self.value_input = QLineEdit()
+        self.value_input.setPlaceholderText("Digite o valor...")
+        input_layout.addWidget(self.value_input)
+        layout.addLayout(input_layout)
+        
+        # Botão converter
+        btn_convert = QPushButton("Converter")
+        btn_convert.clicked.connect(self.convert)
+        layout.addWidget(btn_convert)
+        
+        # Resultado
+        self.result_label = QLabel("")
+        self.result_label.setStyleSheet("""
+            QLabel {
+                font-size: 24px;
+                font-weight: bold;
+                color: #28a745;
+                padding: 10px;
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 5px;
+                min-height: 50px;
+            }
+        """)
+        self.result_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.result_label)
+        
+        self.setLayout(layout)
+        self.update_units("Comprimento")
+    
+    def update_units(self, category):
+        """Atualizar lista de unidades baseado na categoria"""
+        self.from_combo.clear()
+        self.to_combo.clear()
+        
+        units = self.get_units_for_category(category)
+        self.from_combo.addItems(units)
+        self.to_combo.addItems(units)
+    
+    def get_units_for_category(self, category):
+        """Obter unidades para uma categoria"""
+        units_dict = {
+            "Comprimento": ["Metro", "Quilômetro", "Centímetro", "Milímetro", 
+                           "Polegada", "Pé", "Jarda", "Milha"],
+            "Massa": ["Quilograma", "Grama", "Miligrama", "Tonelada", 
+                     "Libra", "Onça"],
+            "Temperatura": ["Celsius", "Fahrenheit", "Kelvin"],
+            "Área": ["Metro²", "Quilômetro²", "Centímetro²", "Hectare", "Acre"],
+            "Volume": ["Metro³", "Litro", "Mililitro", "Galão"],
+            "Velocidade": ["m/s", "km/h", "mph", "nó"],
+            "Tempo": ["Segundo", "Minuto", "Hora", "Dia"],
+            "Energia": ["Joule", "Caloria", "Quilocaloria", "BTU", "kWh"]
+        }
+        return units_dict.get(category, [])
+    
+    def convert(self):
+        """Realizar conversão"""
+        try:
+            value = float(self.value_input.text())
+            from_unit = self.from_combo.currentText()
+            to_unit = self.to_combo.currentText()
+            category = self.category_combo.currentText()
+            
+            # Converter
+            result = self.convert_unit(value, from_unit, to_unit, category)
+            
+            self.result_label.setText(f"{value} {from_unit} = {result:.6g} {to_unit}")
+            
+        except ValueError:
+            QMessageBox.warning(self, "Erro", "Digite um valor válido!")
+    
+    def convert_unit(self, value, from_unit, to_unit, category):
+        """Converter entre unidades"""
+        # Fatores de conversão para unidade base (SI)
+        base_factors = {
+            "Comprimento": {
+                "Metro": 1, "Quilômetro": 1000, "Centímetro": 0.01, "Milímetro": 0.001,
+                "Polegada": 0.0254, "Pé": 0.3048, "Jarda": 0.9144, "Milha": 1609.344
+            },
+            "Massa": {
+                "Quilograma": 1, "Grama": 0.001, "Miligrama": 0.000001, "Tonelada": 1000,
+                "Libra": 0.453592, "Onça": 0.0283495
+            },
+            "Temperatura": {
+                "Celsius": lambda v: v,
+                "Fahrenheit": lambda v: (v - 32) * 5/9,
+                "Kelvin": lambda v: v - 273.15
+            },
+            "Área": {
+                "Metro²": 1, "Quilômetro²": 1e6, "Centímetro²": 0.0001,
+                "Hectare": 10000, "Acre": 4046.86
+            },
+            "Volume": {
+                "Metro³": 1, "Litro": 0.001, "Mililitro": 0.000001, "Galão": 0.00378541
+            },
+            "Velocidade": {
+                "m/s": 1, "km/h": 0.277778, "mph": 0.44704, "nó": 0.514444
+            },
+            "Tempo": {
+                "Segundo": 1, "Minuto": 60, "Hora": 3600, "Dia": 86400
+            },
+            "Energia": {
+                "Joule": 1, "Caloria": 4.184, "Quilocaloria": 4184, "BTU": 1055.06, "kWh": 3.6e6
+            }
+        }
+        
+        # Fatores de conversão da unidade base para a unidade destino
+        to_factors = {
+            "Comprimento": {
+                "Metro": 1, "Quilômetro": 0.001, "Centímetro": 100, "Milímetro": 1000,
+                "Polegada": 39.3701, "Pé": 3.28084, "Jarda": 1.09361, "Milha": 0.000621371
+            },
+            "Massa": {
+                "Quilograma": 1, "Grama": 1000, "Miligrama": 1e6, "Tonelada": 0.001,
+                "Libra": 2.20462, "Onça": 35.274
+            },
+            "Temperatura": {
+                "Celsius": lambda v: v,
+                "Fahrenheit": lambda v: v * 9/5 + 32,
+                "Kelvin": lambda v: v + 273.15
+            },
+            "Área": {
+                "Metro²": 1, "Quilômetro²": 1e-6, "Centímetro²": 10000,
+                "Hectare": 0.0001, "Acre": 0.000247105
+            },
+            "Volume": {
+                "Metro³": 1, "Litro": 1000, "Mililitro": 1e6, "Galão": 264.172
+            },
+            "Velocidade": {
+                "m/s": 1, "km/h": 3.6, "mph": 2.23694, "nó": 1.94384
+            },
+            "Tempo": {
+                "Segundo": 1, "Minuto": 1/60, "Hora": 1/3600, "Dia": 1/86400
+            },
+            "Energia": {
+                "Joule": 1, "Caloria": 1/4.184, "Quilocaloria": 1/4184,
+                "BTU": 1/1055.06, "kWh": 1/3.6e6
+            }
+        }
+        
+        if category == "Temperatura":
+            # Temperatura usa funções especiais
+            base_value = base_factors[category][from_unit](value)
+            return to_factors[category][to_unit](base_value)
+        else:
+            # Converter para unidade base e depois para destino
+            base_value = value * base_factors[category][from_unit]
+            return base_value * to_factors[category][to_unit]
+
+class StatisticsCalculator(QDialog):
+    """Calculadora estatística simples"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Calculadora Estatística")
+        self.setGeometry(200, 200, 500, 500)
+        
+        layout = QVBoxLayout()
+        
+        # Entrada de dados
+        input_group = QGroupBox("Dados")
+        input_layout = QVBoxLayout()
+        
+        input_layout.addWidget(QLabel("Digite os números (separados por vírgula):"))
+        self.data_input = QTextEdit()
+        self.data_input.setPlaceholderText("Ex: 10, 20, 30, 40, 50")
+        self.data_input.setMaximumHeight(80)
+        input_layout.addWidget(self.data_input)
+        
+        btn_calc = QPushButton("Calcular Estatísticas")
+        btn_calc.clicked.connect(self.calculate_stats)
+        input_layout.addWidget(btn_calc)
+        
+        input_group.setLayout(input_layout)
+        layout.addWidget(input_group)
+        
+        # Resultados
+        results_group = QGroupBox("Resultados")
+        results_layout = QGridLayout()
+        
+        self.results_text = QTextEdit()
+        self.results_text.setReadOnly(True)
+        self.results_text.setMaximumHeight(200)
+        results_layout.addWidget(self.results_text, 0, 0, 1, 2)
+        
+        results_group.setLayout(results_layout)
+        layout.addWidget(results_group)
+        
+        # Gráfico simples com texto
+        viz_group = QGroupBox("Visualização (Distribuição)")
+        viz_layout = QVBoxLayout()
+        
+        self.viz_text = QTextEdit()
+        self.viz_text.setReadOnly(True)
+        self.viz_text.setMaximumHeight(150)
+        self.viz_text.setFont(QFont("Courier New", 10))
+        viz_layout.addWidget(self.viz_text)
+        
+        viz_group.setLayout(viz_layout)
+        layout.addWidget(viz_group)
+        
+        self.setLayout(layout)
+    
+    def calculate_stats(self):
+        """Calcular estatísticas"""
+        try:
+            # Processar dados
+            text = self.data_input.toPlainText()
+            numbers = [float(x.strip()) for x in text.split(',') if x.strip()]
+            
+            if len(numbers) == 0:
+                QMessageBox.warning(self, "Aviso", "Digite alguns números!")
+                return
+            
+            n = len(numbers)
+            soma = sum(numbers)
+            media = soma / n
+            variancia = sum((x - media) ** 2 for x in numbers) / n
+            desvio = math.sqrt(variancia)
+            
+            # Ordenar para mediana e quartis
+            sorted_numbers = sorted(numbers)
+            mediana = sorted_numbers[n // 2] if n % 2 else (sorted_numbers[n // 2 - 1] + sorted_numbers[n // 2]) / 2
+            
+            # Moda
+            from collections import Counter
+            freq = Counter(numbers)
+            max_freq = max(freq.values())
+            moda = [k for k, v in freq.items() if v == max_freq]
+            
+            # Resultado
+            result_text = f"""
+            📊 Estatísticas Descritivas:
+            
+            Número de elementos: {n}
+            Soma: {soma:.4f}
+            Média: {media:.4f}
+            Mediana: {mediana:.4f}
+            Moda: {', '.join(f'{x:.4f}' for x in moda)}
+            Variância: {variancia:.4f}
+            Desvio Padrão: {desvio:.4f}
+            Mínimo: {min(numbers):.4f}
+            Máximo: {max(numbers):.4f}
+            Amplitude: {max(numbers) - min(numbers):.4f}
+            
+            Quartis:
+            Q1 (25%): {sorted_numbers[n // 4]:.4f}
+            Q2 (50%): {mediana:.4f}
+            Q3 (75%): {sorted_numbers[3 * n // 4]:.4f}
+            """
+            
+            self.results_text.setText(result_text)
+            
+            # Gerar visualização simples
+            self.generate_simple_viz(numbers)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro nos cálculos: {str(e)}")
+    
+    def generate_simple_viz(self, numbers):
+        """Gerar visualização simples com caracteres"""
+        # Criar histograma simples
+        min_val = min(numbers)
+        max_val = max(numbers)
+        range_val = max_val - min_val
+        
+        if range_val == 0:
+            self.viz_text.setText("Todos os valores são iguais")
+            return
+        
+        # Criar 10 bins
+        bins = 10
+        bin_size = range_val / bins
+        
+        # Contar frequências
+        freq = [0] * bins
+        for x in numbers:
+            bin_index = min(int((x - min_val) / bin_size), bins - 1)
+            freq[bin_index] += 1
+        
+        # Escalar para máximo 20 caracteres
+        max_freq = max(freq)
+        scale = 20 / max_freq if max_freq > 0 else 1
+        
+        # Gerar visualização
+        viz = "Distribuição dos dados:\n\n"
+        for i in range(bins):
+            start = min_val + i * bin_size
+            end = min_val + (i + 1) * bin_size
+            bar_length = int(freq[i] * scale)
+            bar = "█" * bar_length
+            viz += f"[{start:6.2f} - {end:6.2f}] |{bar:<20} {freq[i]}\n"
+        
+        self.viz_text.setText(viz)
+
+class MatrixCalculator(QDialog):
+    """Calculadora de matrizes simples"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Calculadora de Matrizes")
+        self.setGeometry(200, 200, 600, 500)
+        
+        layout = QVBoxLayout()
+        
+        # Tabs para diferentes operações
+        tabs = QTabWidget()
+        
+        # Tab Soma
+        sum_tab = self.create_sum_tab()
+        tabs.addTab(sum_tab, "Soma/Subtração")
+        
+        # Tab Multiplicação
+        mult_tab = self.create_mult_tab()
+        tabs.addTab(mult_tab, "Multiplicação")
+        
+        # Tab Determinante
+        det_tab = self.create_det_tab()
+        tabs.addTab(det_tab, "Determinante")
+        
+        layout.addWidget(tabs)
+        self.setLayout(layout)
+    
+    def create_sum_tab(self):
+        """Criar tab de soma/subtração"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Tamanho da matriz
+        size_layout = QHBoxLayout()
+        size_layout.addWidget(QLabel("Tamanho:"))
+        self.sum_size = QSpinBox()
+        self.sum_size.setRange(1, 4)
+        self.sum_size.setValue(2)
+        self.sum_size.valueChanged.connect(lambda: self.update_matrix_size(self.sum_a, self.sum_size.value()))
+        size_layout.addWidget(self.sum_size)
+        size_layout.addStretch()
+        layout.addLayout(size_layout)
+        
+        # Matrizes A e B
+        matrices_layout = QHBoxLayout()
+        
+        # Matriz A
+        a_group = QGroupBox("Matriz A")
+        a_layout = QVBoxLayout()
+        self.sum_a = QTableWidget(2, 2)
+        a_layout.addWidget(self.sum_a)
+        a_group.setLayout(a_layout)
+        matrices_layout.addWidget(a_group)
+        
+        # Matriz B
+        b_group = QGroupBox("Matriz B")
+        b_layout = QVBoxLayout()
+        self.sum_b = QTableWidget(2, 2)
+        b_layout.addWidget(self.sum_b)
+        b_group.setLayout(b_layout)
+        matrices_layout.addWidget(b_group)
+        
+        layout.addLayout(matrices_layout)
+        
+        # Operação
+        op_layout = QHBoxLayout()
+        self.sum_op = QComboBox()
+        self.sum_op.addItems(["A + B", "A - B", "B - A"])
+        op_layout.addWidget(self.sum_op)
+        
+        btn_calc = QPushButton("Calcular")
+        btn_calc.clicked.connect(self.calculate_sum)
+        op_layout.addWidget(btn_calc)
+        layout.addLayout(op_layout)
+        
+        # Resultado
+        result_group = QGroupBox("Resultado")
+        result_layout = QVBoxLayout()
+        self.sum_result = QTableWidget()
+        result_layout.addWidget(self.sum_result)
+        result_group.setLayout(result_layout)
+        layout.addWidget(result_group)
+        
+        widget.setLayout(layout)
+        return widget
+    
+    def create_mult_tab(self):
+        """Criar tab de multiplicação"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Tamanhos
+        size_layout = QHBoxLayout()
+        size_layout.addWidget(QLabel("Linhas A:"))
+        self.mult_rows_a = QSpinBox()
+        self.mult_rows_a.setRange(1, 4)
+        self.mult_rows_a.setValue(2)
+        self.mult_rows_a.valueChanged.connect(self.update_mult_matrices)
+        size_layout.addWidget(self.mult_rows_a)
+        
+        size_layout.addWidget(QLabel("Colunas A:"))
+        self.mult_cols_a = QSpinBox()
+        self.mult_cols_a.setRange(1, 4)
+        self.mult_cols_a.setValue(3)
+        self.mult_cols_a.valueChanged.connect(self.update_mult_matrices)
+        size_layout.addWidget(self.mult_cols_a)
+        
+        size_layout.addWidget(QLabel("Linhas B:"))
+        self.mult_rows_b = QSpinBox()
+        self.mult_rows_b.setRange(1, 4)
+        self.mult_rows_b.setValue(3)
+        self.mult_rows_b.valueChanged.connect(self.update_mult_matrices)
+        size_layout.addWidget(self.mult_rows_b)
+        
+        size_layout.addWidget(QLabel("Colunas B:"))
+        self.mult_cols_b = QSpinBox()
+        self.mult_cols_b.setRange(1, 4)
+        self.mult_cols_b.setValue(2)
+        self.mult_cols_b.valueChanged.connect(self.update_mult_matrices)
+        size_layout.addWidget(self.mult_cols_b)
+        
+        size_layout.addStretch()
+        layout.addLayout(size_layout)
+        
+        # Matrizes A e B
+        matrices_layout = QHBoxLayout()
+        
+        # Matriz A
+        a_group = QGroupBox("Matriz A")
+        a_layout = QVBoxLayout()
+        self.mult_a = QTableWidget(2, 3)
+        a_layout.addWidget(self.mult_a)
+        a_group.setLayout(a_layout)
+        matrices_layout.addWidget(a_group)
+        
+        # Matriz B
+        b_group = QGroupBox("Matriz B")
+        b_layout = QVBoxLayout()
+        self.mult_b = QTableWidget(3, 2)
+        b_layout.addWidget(self.mult_b)
+        b_group.setLayout(b_layout)
+        matrices_layout.addWidget(b_group)
+        
+        layout.addLayout(matrices_layout)
+        
+        # Botão calcular
+        btn_calc = QPushButton("Calcular A × B")
+        btn_calc.clicked.connect(self.calculate_mult)
+        layout.addWidget(btn_calc)
+        
+        # Resultado
+        result_group = QGroupBox("Resultado")
+        result_layout = QVBoxLayout()
+        self.mult_result = QTableWidget()
+        result_layout.addWidget(self.mult_result)
+        result_group.setLayout(result_layout)
+        layout.addWidget(result_group)
+        
+        widget.setLayout(layout)
+        return widget
+    
+    def create_det_tab(self):
+        """Criar tab de determinante"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Tamanho da matriz
+        size_layout = QHBoxLayout()
+        size_layout.addWidget(QLabel("Ordem:"))
+        self.det_size = QSpinBox()
+        self.det_size.setRange(1, 4)
+        self.det_size.setValue(2)
+        self.det_size.valueChanged.connect(lambda: self.update_matrix_size(self.det_matrix, self.det_size.value()))
+        size_layout.addWidget(self.det_size)
+        size_layout.addStretch()
+        layout.addLayout(size_layout)
+        
+        # Matriz
+        self.det_matrix = QTableWidget(2, 2)
+        layout.addWidget(self.det_matrix)
+        
+        # Botão calcular
+        btn_calc = QPushButton("Calcular Determinante")
+        btn_calc.clicked.connect(self.calculate_det)
+        layout.addWidget(btn_calc)
+        
+        # Resultado
+        self.det_result = QLabel("")
+        self.det_result.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #007bff;
+                padding: 10px;
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 5px;
+            }
+        """)
+        self.det_result.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.det_result)
+        
+        widget.setLayout(layout)
+        return widget
+    
+    def update_matrix_size(self, table, size):
+        """Atualizar tamanho da matriz"""
+        table.setRowCount(size)
+        table.setColumnCount(size)
+    
+    def update_mult_matrices(self):
+        """Atualizar tamanhos das matrizes de multiplicação"""
+        self.mult_a.setRowCount(self.mult_rows_a.value())
+        self.mult_a.setColumnCount(self.mult_cols_a.value())
+        self.mult_b.setRowCount(self.mult_rows_b.value())
+        self.mult_b.setColumnCount(self.mult_cols_b.value())
+    
+    def calculate_sum(self):
+        """Calcular soma/subtração de matrizes"""
+        try:
+            size = self.sum_size.value()
+            
+            # Ler matrizes
+            A = []
+            B = []
+            
+            for i in range(size):
+                row_a = []
+                row_b = []
+                for j in range(size):
+                    item_a = self.sum_a.item(i, j)
+                    item_b = self.sum_b.item(i, j)
+                    val_a = float(item_a.text()) if item_a else 0
+                    val_b = float(item_b.text()) if item_b else 0
+                    row_a.append(val_a)
+                    row_b.append(val_b)
+                A.append(row_a)
+                B.append(row_b)
+            
+            # Calcular
+            op = self.sum_op.currentText()
+            if op == "A + B":
+                result = [[A[i][j] + B[i][j] for j in range(size)] for i in range(size)]
+            elif op == "A - B":
+                result = [[A[i][j] - B[i][j] for j in range(size)] for i in range(size)]
+            else:  # B - A
+                result = [[B[i][j] - A[i][j] for j in range(size)] for i in range(size)]
+            
+            # Mostrar resultado
+            self.sum_result.setRowCount(size)
+            self.sum_result.setColumnCount(size)
+            for i in range(size):
+                for j in range(size):
+                    self.sum_result.setItem(i, j, QTableWidgetItem(f"{result[i][j]:.2f}"))
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro no cálculo: {str(e)}")
+    
+    def calculate_mult(self):
+        """Calcular multiplicação de matrizes"""
+        try:
+            rows_a = self.mult_rows_a.value()
+            cols_a = self.mult_cols_a.value()
+            rows_b = self.mult_rows_b.value()
+            cols_b = self.mult_cols_b.value()
+            
+            if cols_a != rows_b:
+                QMessageBox.warning(self, "Erro", 
+                    "Número de colunas de A deve ser igual ao número de linhas de B")
+                return
+            
+            # Ler matrizes
+            A = []
+            B = []
+            
+            for i in range(rows_a):
+                row = []
+                for j in range(cols_a):
+                    item = self.mult_a.item(i, j)
+                    row.append(float(item.text()) if item else 0)
+                A.append(row)
+            
+            for i in range(rows_b):
+                row = []
+                for j in range(cols_b):
+                    item = self.mult_b.item(i, j)
+                    row.append(float(item.text()) if item else 0)
+                B.append(row)
+            
+            # Multiplicar
+            result = [[0 for _ in range(cols_b)] for _ in range(rows_a)]
+            for i in range(rows_a):
+                for j in range(cols_b):
+                    for k in range(cols_a):
+                        result[i][j] += A[i][k] * B[k][j]
+            
+            # Mostrar resultado
+            self.mult_result.setRowCount(rows_a)
+            self.mult_result.setColumnCount(cols_b)
+            for i in range(rows_a):
+                for j in range(cols_b):
+                    self.mult_result.setItem(i, j, QTableWidgetItem(f"{result[i][j]:.2f}"))
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro no cálculo: {str(e)}")
+    
+    def calculate_det(self):
+        """Calcular determinante"""
+        try:
+            size = self.det_size.value()
+            
+            # Ler matriz
+            matrix = []
+            for i in range(size):
+                row = []
+                for j in range(size):
+                    item = self.det_matrix.item(i, j)
+                    row.append(float(item.text()) if item else 0)
+                matrix.append(row)
+            
+            # Calcular determinante (implementação simples para matrizes até 4x4)
+            if size == 1:
+                det = matrix[0][0]
+            elif size == 2:
+                det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]
+            elif size == 3:
+                det = (matrix[0][0] * matrix[1][1] * matrix[2][2] +
+                       matrix[0][1] * matrix[1][2] * matrix[2][0] +
+                       matrix[0][2] * matrix[1][0] * matrix[2][1] -
+                       matrix[0][2] * matrix[1][1] * matrix[2][0] -
+                       matrix[0][1] * matrix[1][0] * matrix[2][2] -
+                       matrix[0][0] * matrix[1][2] * matrix[2][1])
+            else:  # size == 4
+                # Método simplificado para 4x4
+                det = 0
+                for i in range(4):
+                    # Calcular menor complementar
+                    submatrix = []
+                    for j in range(1, 4):
+                        row = []
+                        for k in range(4):
+                            if k != i:
+                                row.append(matrix[j][k])
+                        submatrix.append(row)
+                    
+                    # Calcular determinante da submatriz 3x3
+                    subdet = (submatrix[0][0] * submatrix[1][1] * submatrix[2][2] +
+                              submatrix[0][1] * submatrix[1][2] * submatrix[2][0] +
+                              submatrix[0][2] * submatrix[1][0] * submatrix[2][1] -
+                              submatrix[0][2] * submatrix[1][1] * submatrix[2][0] -
+                              submatrix[0][1] * submatrix[1][0] * submatrix[2][2] -
+                              submatrix[0][0] * submatrix[1][2] * submatrix[2][1])
+                    
+                    det += matrix[0][i] * (-1) ** i * subdet
+            
+            self.det_result.setText(f"det = {det:.6f}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro no cálculo: {str(e)}")
+
+class EnhancedCalculator(QMainWindow):
     def __init__(self):
         super().__init__()
         
         # Configurações da janela
-        self.setWindowTitle("Calculadora Multi-Modo")
-        self.setGeometry(100, 100, 500, 600)
-        self.setMinimumSize(400, 500)
+        self.setWindowTitle("Calculadora Avançada")
+        self.setGeometry(100, 100, 1000, 700)
         
         # Variáveis de estado
-        self.current_mode = "Padrão"  # Padrão, Científica, Programador
+        self.current_mode = "Padrão"
         self.history = []
         self.current_expression = ""
         self.last_result = 0
-        self.angle_unit = "DEG"  # DEG, RAD, GRAD
-        self.word_size = 64  # Para modo programador (bits)
-        self.number_base = 10  # 10=decimal, 16=hex, 8=oct, 2=bin
+        self.angle_unit = "DEG"
+        self.word_size = 64
+        self.number_base = 10
+        self.memory = {}
+        self.variables = {'ans': 0}
         
         # Configurar interface
         self.init_ui()
-        
-        # Aplicar estilo
         self.apply_style()
     
     def init_ui(self):
         """Inicializar interface do usuário"""
         central = QWidget()
         self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-        layout.setSpacing(5)
+        main_layout = QHBoxLayout(central)
+        main_layout.setSpacing(5)
         
-        # ========== BARRA DE MENUS ==========
+        # ========== PAINEL ESQUERDO (Calculadora) ==========
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setSpacing(5)
+        
+        # Barra de ferramentas superior
+        self.create_top_toolbar(left_layout)
+        
+        # Displays
+        self.create_displays(left_layout)
+        
+        # Área dos botões
+        self.buttons_widget = QStackedWidget()
+        left_layout.addWidget(self.buttons_widget)
+        
+        # Criar os diferentes modos
+        self.create_standard_mode()
+        self.create_scientific_mode()
+        self.create_programmer_mode()
+        
+        main_layout.addWidget(left_panel, 2)
+        
+        # ========== PAINEL DIREITO (Ferramentas) ==========
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setSpacing(5)
+        
+        # Abas para diferentes ferramentas
+        self.tools_tabs = QTabWidget()
+        
+        # Aba de Histórico
+        self.create_history_tab()
+        
+        # Aba de Memória
+        self.create_memory_tab()
+        
+        # Aba de Funções Especiais
+        self.create_functions_tab()
+        
+        # Aba de Conversões
+        self.create_conversions_tab()
+        
+        # Aba de Estatísticas
+        self.create_statistics_tab()
+        
+        right_layout.addWidget(self.tools_tabs)
+        
+        main_layout.addWidget(right_panel, 1)
+        
+        # Barra de menus
+        self.create_menu_bar()
+    
+    def create_menu_bar(self):
+        """Criar barra de menus"""
         menubar = self.menuBar()
         
         # Menu Arquivo
@@ -108,61 +1021,26 @@ class Calculator(QMainWindow):
         mode_menu.addAction(mode_programador)
         self.mode_group.addAction(mode_programador)
         
-        # Menu Configurações
-        config_menu = menubar.addMenu("&Configurações")
+        # Menu Ferramentas
+        tools_menu = menubar.addMenu("&Ferramentas")
         
-        # Submenu para unidades angulares (modo científico)
-        self.angle_menu = config_menu.addMenu("Unidade Angular")
-        self.angle_group = QActionGroup(self)
+        function_action = QAction("📈 Calculadora de Funções", self)
+        function_action.triggered.connect(self.show_function_calc)
+        tools_menu.addAction(function_action)
         
-        angle_deg = QAction("&Graus (DEG)", self, checkable=True)
-        angle_deg.setChecked(True)
-        angle_deg.triggered.connect(lambda: self.set_angle_unit("DEG"))
-        self.angle_menu.addAction(angle_deg)
-        self.angle_group.addAction(angle_deg)
+        matrix_action = QAction("🔢 Calculadora de Matrizes", self)
+        matrix_action.triggered.connect(self.show_matrix_calc)
+        tools_menu.addAction(matrix_action)
         
-        angle_rad = QAction("&Radianos (RAD)", self, checkable=True)
-        angle_rad.triggered.connect(lambda: self.set_angle_unit("RAD"))
-        self.angle_menu.addAction(angle_rad)
-        self.angle_group.addAction(angle_rad)
+        stats_action = QAction("📊 Calculadora Estatística", self)
+        stats_action.triggered.connect(self.show_stats_calc)
+        tools_menu.addAction(stats_action)
         
-        angle_grad = QAction("&Grados (GRAD)", self, checkable=True)
-        angle_grad.triggered.connect(lambda: self.set_angle_unit("GRAD"))
-        self.angle_menu.addAction(angle_grad)
-        self.angle_group.addAction(angle_grad)
+        tools_menu.addSeparator()
         
-        # Submenu para base numérica (modo programador)
-        self.base_menu = config_menu.addMenu("Base Numérica")
-        self.base_group = QActionGroup(self)
-        
-        base_dec = QAction("&Decimal", self, checkable=True)
-        base_dec.setChecked(True)
-        base_dec.triggered.connect(lambda: self.set_number_base(10))
-        self.base_menu.addAction(base_dec)
-        self.base_group.addAction(base_dec)
-        
-        base_hex = QAction("&Hexadecimal", self, checkable=True)
-        base_hex.triggered.connect(lambda: self.set_number_base(16))
-        self.base_menu.addAction(base_hex)
-        self.base_group.addAction(base_hex)
-        
-        base_oct = QAction("&Octal", self, checkable=True)
-        base_oct.triggered.connect(lambda: self.set_number_base(8))
-        self.base_menu.addAction(base_oct)
-        self.base_group.addAction(base_oct)
-        
-        base_bin = QAction("&Binário", self, checkable=True)
-        base_bin.triggered.connect(lambda: self.set_number_base(2))
-        self.base_menu.addAction(base_bin)
-        self.base_group.addAction(base_bin)
-        
-        config_menu.addSeparator()
-        
-        word_size_menu = config_menu.addMenu("Tamanho da Palavra")
-        for bits in [8, 16, 32, 64]:
-            action = QAction(f"{bits} bits", self)
-            action.triggered.connect(lambda checked, b=bits: self.set_word_size(b))
-            word_size_menu.addAction(action)
+        unit_action = QAction("📏 Conversor de Unidades", self)
+        unit_action.triggered.connect(self.show_unit_converter)
+        tools_menu.addAction(unit_action)
         
         # Menu Ajuda
         help_menu = menubar.addMenu("A&juda")
@@ -170,12 +1048,12 @@ class Calculator(QMainWindow):
         about_action = QAction("&Sobre", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
-        
-        # ========== BARRA DE FERRAMENTAS ==========
+    
+    def create_top_toolbar(self, layout):
+        """Criar barra de ferramentas superior"""
         toolbar = QToolBar()
         toolbar.setMovable(False)
         toolbar.setIconSize(QSize(24, 24))
-        self.addToolBar(toolbar)
         
         # Indicador de modo
         self.mode_label = QLabel("📱 Modo: Padrão")
@@ -183,17 +1061,30 @@ class Calculator(QMainWindow):
         
         toolbar.addSeparator()
         
-        # Indicador de unidade angular (para modo científico)
+        # Indicador de unidade angular
         self.angle_label = QLabel("📐 DEG")
         toolbar.addWidget(self.angle_label)
-        self.angle_label.hide()
         
         toolbar.addSeparator()
         
-        # Indicador de base (para modo programador)
+        # Indicador de base
         self.base_label = QLabel("🔢 DEC")
         toolbar.addWidget(self.base_label)
-        self.base_label.hide()
+        
+        toolbar.addSeparator()
+        
+        # Botões de memória
+        btn_memory_store = QAction("M+", self)
+        btn_memory_store.triggered.connect(self.memory_store)
+        toolbar.addAction(btn_memory_store)
+        
+        btn_memory_recall = QAction("MR", self)
+        btn_memory_recall.triggered.connect(self.memory_recall)
+        toolbar.addAction(btn_memory_recall)
+        
+        btn_memory_clear = QAction("MC", self)
+        btn_memory_clear.triggered.connect(self.memory_clear)
+        toolbar.addAction(btn_memory_clear)
         
         toolbar.addSeparator()
         
@@ -202,15 +1093,10 @@ class Calculator(QMainWindow):
         btn_clear_all.triggered.connect(self.clear_all)
         toolbar.addAction(btn_clear_all)
         
-        # ========== ÁREA PRINCIPAL ==========
-        main_splitter = QSplitter(Qt.Horizontal)
-        layout.addWidget(main_splitter)
-        
-        # Lado esquerdo: Calculadora
-        calc_widget = QWidget()
-        calc_layout = QVBoxLayout(calc_widget)
-        calc_layout.setSpacing(10)
-        
+        layout.addWidget(toolbar)
+    
+    def create_displays(self, layout):
+        """Criar displays"""
         # Display principal
         self.display = QLineEdit()
         self.display.setReadOnly(True)
@@ -218,15 +1104,16 @@ class Calculator(QMainWindow):
         self.display.setMinimumHeight(80)
         self.display.setStyleSheet("""
             QLineEdit {
-                font-size: 24px;
+                font-size: 28px;
                 font-weight: bold;
                 background-color: #f8f9fa;
                 border: 2px solid #dee2e6;
                 border-radius: 5px;
                 padding: 10px;
+                font-family: 'Courier New';
             }
         """)
-        calc_layout.addWidget(self.display)
+        layout.addWidget(self.display)
         
         # Display de expressão
         self.expression_display = QLineEdit()
@@ -235,67 +1122,16 @@ class Calculator(QMainWindow):
         self.expression_display.setMinimumHeight(40)
         self.expression_display.setStyleSheet("""
             QLineEdit {
-                font-size: 14px;
+                font-size: 16px;
                 color: #6c757d;
                 background-color: #f8f9fa;
                 border: 1px solid #dee2e6;
                 border-radius: 3px;
                 padding: 5px;
+                font-family: 'Courier New';
             }
         """)
-        calc_layout.addWidget(self.expression_display)
-        
-        # Área dos botões da calculadora
-        self.buttons_widget = QStackedWidget()
-        calc_layout.addWidget(self.buttons_widget)
-        
-        # Criar os diferentes modos de calculadora
-        self.create_standard_mode()
-        self.create_scientific_mode()
-        self.create_programmer_mode()
-        
-        main_splitter.addWidget(calc_widget)
-        
-        # Lado direito: Histórico
-        history_widget = QWidget()
-        history_layout = QVBoxLayout(history_widget)
-        history_layout.setContentsMargins(5, 5, 5, 5)
-        
-        # Título do histórico
-        history_title = QLabel("📋 Histórico")
-        history_title.setStyleSheet("""
-            QLabel {
-                font-size: 16px;
-                font-weight: bold;
-                padding: 5px;
-                background-color: #e9ecef;
-                border-radius: 3px;
-            }
-        """)
-        history_layout.addWidget(history_title)
-        
-        # Lista de histórico
-        self.history_list = QListWidget()
-        self.history_list.itemDoubleClicked.connect(self.history_item_clicked)
-        history_layout.addWidget(self.history_list)
-        
-        # Botões do histórico
-        history_buttons = QHBoxLayout()
-        
-        btn_copy = QPushButton("📋 Copiar")
-        btn_copy.clicked.connect(self.copy_history_item)
-        history_buttons.addWidget(btn_copy)
-        
-        btn_clear = QPushButton("🗑️ Limpar")
-        btn_clear.clicked.connect(self.clear_history)
-        history_buttons.addWidget(btn_clear)
-        
-        history_layout.addLayout(history_buttons)
-        
-        main_splitter.addWidget(history_widget)
-        
-        # Definir tamanhos iniciais do splitter
-        main_splitter.setSizes([700, 300])
+        layout.addWidget(self.expression_display)
     
     def create_standard_mode(self):
         """Criar interface do modo padrão"""
@@ -303,7 +1139,6 @@ class Calculator(QMainWindow):
         layout = QGridLayout(widget)
         layout.setSpacing(2)
         
-        # Definir botões do modo padrão
         buttons = [
             ['C', '⌫', '%', '/'],
             ['7', '8', '9', '*'],
@@ -312,83 +1147,11 @@ class Calculator(QMainWindow):
             ['±', '0', '.', '=']
         ]
         
-        # Criar e posicionar botões
         for i, row in enumerate(buttons):
             for j, text in enumerate(row):
                 btn = QPushButton(text)
-                btn.setMinimumHeight(50)
-                btn.setMinimumWidth(60)
-                
-                # Estilo especial para operadores
-                if text in ['/', '*', '-', '+', '=']:
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #ffc107;
-                            color: black;
-                            font-weight: bold;
-                            font-size: 18px;
-                            border: none;
-                            border-radius: 3px;
-                        }
-                        QPushButton:hover {
-                            background-color: #e0a800;
-                        }
-                        QPushButton:pressed {
-                            background-color: #d39e00;
-                        }
-                    """)
-                elif text == 'C':
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #dc3545;
-                            color: white;
-                            font-weight: bold;
-                            font-size: 14px;
-                            border: none;
-                            border-radius: 3px;
-                        }
-                        QPushButton:hover {
-                            background-color: #c82333;
-                        }
-                        QPushButton:pressed {
-                            background-color: #bd2130;
-                        }
-                    """)
-                elif text == '⌫':
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #6c757d;
-                            color: white;
-                            font-weight: bold;
-                            font-size: 14px;
-                            border: none;
-                            border-radius: 3px;
-                        }
-                        QPushButton:hover {
-                            background-color: #5a6268;
-                        }
-                        QPushButton:pressed {
-                            background-color: #545b62;
-                        }
-                    """)
-                else:
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #e9ecef;
-                            color: black;
-                            font-weight: bold;
-                            font-size: 18px;
-                            border: none;
-                            border-radius: 3px;
-                        }
-                        QPushButton:hover {
-                            background-color: #dee2e6;
-                        }
-                        QPushButton:pressed {
-                            background-color: #ced4da;
-                        }
-                    """)
-                
+                btn.setMinimumHeight(60)
+                btn.setMinimumWidth(70)
                 btn.clicked.connect(lambda checked, t=text: self.button_click(t))
                 layout.addWidget(btn, i, j)
         
@@ -400,85 +1163,23 @@ class Calculator(QMainWindow):
         layout = QGridLayout(widget)
         layout.setSpacing(2)
         
-        # Botões científicos
         scientific_buttons = [
-            ['sin', 'cos', 'tan', 'π', 'e'],
-            ['asin', 'acos', 'atan', 'log', 'ln'],
-            ['sinh', 'cosh', 'tanh', '√', '∛'],
-            ['x²', 'x³', 'x^y', '10^x', 'e^x'],
-            ['(', ')', 'mod', '!', '1/x'],
-            ['C', '⌫', '%', '/', '*'],
-            ['7', '8', '9', '-', '+'],
-            ['4', '5', '6', '×10^', '='],
-            ['1', '2', '3', 'ANS', 'EXP'],
-            ['±', '0', '.', '(', ')']
+            ['sin', 'cos', 'tan', 'π', 'e', '!'],
+            ['asin', 'acos', 'atan', 'log', 'ln', '√'],
+            ['sinh', 'cosh', 'tanh', 'x²', 'x³', '∛'],
+            ['(', ')', 'mod', '^', '10^', 'e^'],
+            ['7', '8', '9', '/', '*', '1/x'],
+            ['4', '5', '6', '-', '+', 'ANS'],
+            ['1', '2', '3', '×10^', 'EXP', '='],
+            ['C', '⌫', '0', '.', '±', 'RCL']
         ]
         
         for i, row in enumerate(scientific_buttons):
             for j, text in enumerate(row):
                 if text:
                     btn = QPushButton(text)
-                    btn.setMinimumHeight(40)
-                    btn.setMinimumWidth(50)
-                    
-                    # Estilo baseado no tipo de botão
-                    if text in ['sin', 'cos', 'tan', 'log', 'ln', '√', 'π', 'e']:
-                        btn.setStyleSheet("""
-                            QPushButton {
-                                background-color: #17a2b8;
-                                color: white;
-                                font-weight: bold;
-                                font-size: 12px;
-                                border: none;
-                                border-radius: 3px;
-                            }
-                            QPushButton:hover {
-                                background-color: #138496;
-                            }
-                        """)
-                    elif text in ['C', '⌫']:
-                        btn.setStyleSheet("""
-                            QPushButton {
-                                background-color: #dc3545;
-                                color: white;
-                                font-weight: bold;
-                                font-size: 12px;
-                                border: none;
-                                border-radius: 3px;
-                            }
-                            QPushButton:hover {
-                                background-color: #c82333;
-                            }
-                        """)
-                    elif text == '=':
-                        btn.setStyleSheet("""
-                            QPushButton {
-                                background-color: #28a745;
-                                color: white;
-                                font-weight: bold;
-                                font-size: 16px;
-                                border: none;
-                                border-radius: 3px;
-                            }
-                            QPushButton:hover {
-                                background-color: #218838;
-                            }
-                        """)
-                    else:
-                        btn.setStyleSheet("""
-                            QPushButton {
-                                background-color: #e9ecef;
-                                color: black;
-                                font-weight: bold;
-                                font-size: 14px;
-                                border: none;
-                                border-radius: 3px;
-                            }
-                            QPushButton:hover {
-                                background-color: #dee2e6;
-                            }
-                        """)
-                    
+                    btn.setMinimumHeight(50)
+                    btn.setMinimumWidth(60)
                     btn.clicked.connect(lambda checked, t=text: self.button_click(t))
                     layout.addWidget(btn, i, j)
         
@@ -497,11 +1198,12 @@ class Calculator(QMainWindow):
         self.binary_display.setStyleSheet("""
             QLineEdit {
                 font-family: 'Courier New';
-                font-size: 14px;
+                font-size: 16px;
                 background-color: #2d2d2d;
                 color: #00ff00;
                 border: 1px solid #555;
                 padding: 8px;
+                border-radius: 3px;
             }
         """)
         layout.addWidget(self.binary_display)
@@ -545,84 +1247,190 @@ class Calculator(QMainWindow):
         logic_ops = ['AND', 'OR', 'XOR', 'NOT', '<<', '>>']
         for i, op in enumerate(logic_ops):
             btn = QPushButton(op)
-            btn.setMinimumHeight(40)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #6f42c1;
-                    color: white;
-                    font-weight: bold;
-                    border: none;
-                    border-radius: 3px;
-                }
-                QPushButton:hover {
-                    background-color: #5e34a9;
-                }
-            """)
+            btn.setMinimumHeight(45)
             btn.clicked.connect(lambda checked, t=op: self.button_click(t))
             buttons_layout.addWidget(btn, 0, i)
         
         # Botões numéricos
         num_buttons = [
-            ['C', '⌫', '%', '/'],
-            ['7', '8', '9', '*'],
-            ['4', '5', '6', '-'],
-            ['1', '2', '3', '+'],
-            ['A', 'B', 'C', 'D'],
-            ['E', 'F', '0', '=']
+            ['C', '⌫', '%', '/', '*'],
+            ['7', '8', '9', '-', '+'],
+            ['4', '5', '6', '(', ')'],
+            ['1', '2', '3', 'A', 'B'],
+            ['0', '.', '±', 'C', 'D'],
+            ['E', 'F', '<<', '>>', '=']
         ]
         
         for i, row in enumerate(num_buttons, start=1):
             for j, text in enumerate(row):
                 btn = QPushButton(text)
                 btn.setMinimumHeight(45)
-                
-                if text in ['A', 'B', 'C', 'D', 'E', 'F']:
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #fd7e14;
-                            color: white;
-                            font-weight: bold;
-                            border: none;
-                            border-radius: 3px;
-                        }
-                        QPushButton:hover {
-                            background-color: #e46a0b;
-                        }
-                    """)
-                elif text == '=':
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #28a745;
-                            color: white;
-                            font-weight: bold;
-                            font-size: 16px;
-                            border: none;
-                            border-radius: 3px;
-                        }
-                        QPushButton:hover {
-                            background-color: #218838;
-                        }
-                    """)
-                else:
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #e9ecef;
-                            color: black;
-                            font-weight: bold;
-                            font-size: 14px;
-                            border: none;
-                            border-radius: 3px;
-                        }
-                        QPushButton:hover {
-                            background-color: #dee2e6;
-                        }
-                    """)
-                
                 btn.clicked.connect(lambda checked, t=text: self.button_click(t))
                 buttons_layout.addWidget(btn, i, j)
         
         layout.addWidget(buttons_widget)
         self.buttons_widget.addWidget(widget)
+    
+    def create_history_tab(self):
+        """Criar aba de histórico"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Filtros
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Filtrar:"))
+        self.history_filter = QLineEdit()
+        self.history_filter.setPlaceholderText("Digite para filtrar...")
+        self.history_filter.textChanged.connect(self.filter_history)
+        filter_layout.addWidget(self.history_filter)
+        layout.addLayout(filter_layout)
+        
+        # Lista de histórico
+        self.history_list = QListWidget()
+        self.history_list.itemDoubleClicked.connect(self.history_item_clicked)
+        layout.addWidget(self.history_list)
+        
+        # Botões
+        buttons_layout = QHBoxLayout()
+        
+        btn_copy = QPushButton("📋 Copiar")
+        btn_copy.clicked.connect(self.copy_history_item)
+        buttons_layout.addWidget(btn_copy)
+        
+        btn_clear = QPushButton("🗑️ Limpar")
+        btn_clear.clicked.connect(self.clear_history)
+        buttons_layout.addWidget(btn_clear)
+        
+        btn_export = QPushButton("💾 Exportar")
+        btn_export.clicked.connect(self.export_history)
+        buttons_layout.addWidget(btn_export)
+        
+        layout.addLayout(buttons_layout)
+        
+        self.tools_tabs.addTab(widget, "📋 Histórico")
+    
+    def create_memory_tab(self):
+        """Criar aba de memória"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Lista de memória
+        self.memory_list = QTableWidget()
+        self.memory_list.setColumnCount(3)
+        self.memory_list.setHorizontalHeaderLabels(["Chave", "Valor", "Ações"])
+        layout.addWidget(self.memory_list)
+        
+        # Botões
+        buttons_layout = QHBoxLayout()
+        
+        btn_store = QPushButton("M+ (Guardar)")
+        btn_store.clicked.connect(self.memory_store_dialog)
+        buttons_layout.addWidget(btn_store)
+        
+        btn_recall = QPushButton("MR (Recuperar)")
+        btn_recall.clicked.connect(self.memory_recall_dialog)
+        buttons_layout.addWidget(btn_recall)
+        
+        btn_clear = QPushButton("MC (Limpar Tudo)")
+        btn_clear.clicked.connect(self.memory_clear_all)
+        buttons_layout.addWidget(btn_clear)
+        
+        layout.addLayout(buttons_layout)
+        
+        self.tools_tabs.addTab(widget, "💾 Memória")
+    
+    def create_functions_tab(self):
+        """Criar aba de funções especiais"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Funções matemáticas
+        math_group = QGroupBox("Funções Matemáticas")
+        math_layout = QGridLayout()
+        
+        functions = [
+            ("Fatorial", "!"),
+            ("Parte Inteira", "floor"),
+            ("Arredondar", "round"),
+            ("Aleatório", "rand"),
+            ("Absoluto", "abs"),
+            ("Primo?", "isprime")
+        ]
+        
+        for i, (label, func) in enumerate(functions):
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda checked, f=func: self.special_function(f))
+            math_layout.addWidget(btn, i // 2, i % 2)
+        
+        math_group.setLayout(math_layout)
+        layout.addWidget(math_group)
+        
+        # Constantes
+        const_group = QGroupBox("Constantes")
+        const_layout = QGridLayout()
+        
+        constants = [
+            ("π (pi)", "pi"),
+            ("e", "e"),
+            ("φ (ouro)", "phi"),
+            ("γ (Euler)", "gamma")
+        ]
+        
+        for i, (label, const) in enumerate(constants):
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda checked, c=const: self.insert_constant(c))
+            const_layout.addWidget(btn, i // 2, i % 2)
+        
+        const_group.setLayout(const_layout)
+        layout.addWidget(const_group)
+        
+        self.tools_tabs.addTab(widget, "⚡ Funções")
+    
+    def create_conversions_tab(self):
+        """Criar aba de conversões"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Botão para abrir conversor de unidades
+        btn_unit = QPushButton("📏 Conversor de Unidades")
+        btn_unit.setMinimumHeight(50)
+        btn_unit.clicked.connect(self.show_unit_converter)
+        layout.addWidget(btn_unit)
+        
+        # Conversões rápidas
+        quick_group = QGroupBox("Conversões Rápidas")
+        quick_layout = QGridLayout()
+        
+        conversions = [
+            ("°C → °F", "c_to_f"),
+            ("°F → °C", "f_to_c"),
+            ("km → mi", "km_to_mi"),
+            ("mi → km", "mi_to_km"),
+            ("kg → lb", "kg_to_lb"),
+            ("lb → kg", "lb_to_kg")
+        ]
+        
+        for i, (label, conv) in enumerate(conversions):
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda checked, c=conv: self.quick_convert(c))
+            quick_layout.addWidget(btn, i // 2, i % 2)
+        
+        quick_group.setLayout(quick_layout)
+        layout.addWidget(quick_group)
+        
+        self.tools_tabs.addTab(widget, "🔄 Conversões")
+    
+    def create_statistics_tab(self):
+        """Criar aba de estatísticas"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        btn_stats = QPushButton("📊 Calculadora Estatística")
+        btn_stats.setMinimumHeight(50)
+        btn_stats.clicked.connect(self.show_stats_calc)
+        layout.addWidget(btn_stats)
+        
+        self.tools_tabs.addTab(widget, "📊 Estatísticas")
     
     def apply_style(self):
         """Aplicar estilo visual"""
@@ -632,63 +1440,52 @@ class Calculator(QMainWindow):
         }
         QPushButton {
             font-size: 14px;
-            border: none;
-            border-radius: 3px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
             padding: 8px;
+            background-color: white;
+        }
+        QPushButton:hover {
+            background-color: #e9ecef;
         }
         QPushButton:pressed {
-            background-color: #adb5bd;
+            background-color: #dee2e6;
         }
-        QListWidget {
+        QListWidget, QTableWidget {
             background-color: white;
             border: 1px solid #dee2e6;
             border-radius: 3px;
             font-family: 'Courier New';
             font-size: 12px;
         }
-        QListWidget::item {
-            padding: 5px;
-            border-bottom: 1px solid #e9ecef;
-        }
-        QListWidget::item:selected {
-            background-color: #007bff;
-            color: white;
-        }
-        QSplitter::handle {
-            background-color: #dee2e6;
-            width: 2px;
-        }
-        QMenuBar {
-            background-color: #343a40;
-            color: white;
-        }
-        QMenuBar::item {
-            background-color: transparent;
-            padding: 5px 10px;
-        }
-        QMenuBar::item:selected {
-            background-color: #007bff;
-        }
-        QMenu {
-            background-color: white;
+        QTabWidget::pane {
             border: 1px solid #dee2e6;
+            background-color: white;
         }
-        QMenu::item {
-            padding: 5px 20px;
+        QTabBar::tab {
+            background-color: #e9ecef;
+            padding: 8px 15px;
+            margin-right: 2px;
+            border: 1px solid #dee2e6;
+            border-bottom: none;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
         }
-        QMenu::item:selected {
-            background-color: #007bff;
-            color: white;
+        QTabBar::tab:selected {
+            background-color: white;
+            border-bottom: 2px solid #007bff;
         }
-        QToolBar {
-            background-color: #343a40;
-            color: white;
-            spacing: 10px;
-            padding: 5px;
-        }
-        QToolBar QLabel {
-            color: white;
+        QGroupBox {
             font-weight: bold;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            margin-top: 10px;
+            padding-top: 10px;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px 0 5px;
         }
         """
         self.setStyleSheet(style)
@@ -698,7 +1495,6 @@ class Calculator(QMainWindow):
         self.current_mode = mode
         self.mode_label.setText(f"📱 Modo: {mode}")
         
-        # Atualizar widgets visíveis
         if mode == "Padrão":
             self.buttons_widget.setCurrentIndex(0)
             self.angle_label.hide()
@@ -711,23 +1507,6 @@ class Calculator(QMainWindow):
             self.buttons_widget.setCurrentIndex(2)
             self.angle_label.hide()
             self.base_label.show()
-    
-    def set_angle_unit(self, unit):
-        """Definir unidade angular"""
-        self.angle_unit = unit
-        self.angle_label.setText(f"📐 {unit}")
-    
-    def set_number_base(self, base):
-        """Definir base numérica"""
-        self.number_base = base
-        base_names = {10: "DEC", 16: "HEX", 8: "OCT", 2: "BIN"}
-        self.base_label.setText(f"🔢 {base_names[base]}")
-        self.update_base_displays()
-    
-    def set_word_size(self, bits):
-        """Definir tamanho da palavra (bits)"""
-        self.word_size = bits
-        self.statusBar().showMessage(f"Tamanho da palavra: {bits} bits", 2000)
     
     def button_click(self, value):
         """Processar clique em botão"""
@@ -742,9 +1521,11 @@ class Calculator(QMainWindow):
         elif value == 'ANS':
             self.current_expression += str(self.last_result)
             self.update_displays()
+        elif value == 'RCL':
+            self.memory_recall_dialog()
         elif value in ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 
                        'sinh', 'cosh', 'tanh', 'log', 'ln', '√', '∛',
-                       'x²', 'x³', 'x^y', '10^x', 'e^x', '!', '1/x',
+                       'x²', 'x³', '^', '10^', 'e^', '!', '1/x',
                        'π', 'e', 'mod', '×10^', 'EXP']:
             self.handle_scientific_function(value)
         elif value in ['AND', 'OR', 'XOR', 'NOT', '<<', '>>']:
@@ -771,16 +1552,16 @@ class Calculator(QMainWindow):
             self.current_expression += '^2'
         elif func == 'x³':
             self.current_expression += '^3'
-        elif func == 'x^y':
+        elif func == '^':
             self.current_expression += '^'
-        elif func == '10^x':
+        elif func == '10^':
             self.current_expression += '10^'
-        elif func == 'e^x':
+        elif func == 'e^':
             self.current_expression += 'exp('
         elif func == 'log':
-            self.current_expression += 'log('
+            self.current_expression += 'log10('
         elif func == 'ln':
-            self.current_expression += 'ln('
+            self.current_expression += 'log('
         elif func == 'sin':
             self.current_expression += 'sin('
         elif func == 'cos':
@@ -806,9 +1587,9 @@ class Calculator(QMainWindow):
         elif func == 'mod':
             self.current_expression += '%'
         elif func == '×10^':
-            self.current_expression += 'e'
+            self.current_expression += '*10**'
         elif func == 'EXP':
-            self.current_expression += 'e'
+            self.current_expression += '*10**'
         
         self.update_displays()
     
@@ -831,10 +1612,28 @@ class Calculator(QMainWindow):
             expression = expression.replace('÷', '/')
             expression = expression.replace('√', 'sqrt')
             expression = expression.replace('∛', 'cbrt')
+            expression = expression.replace('mod', '%')
+            expression = expression.replace('×10^', '*10**')
+            expression = expression.replace('EXP', '*10**')
             
-            # Processar funções trigonométricas com conversão de unidades
+            # Processar funções especiais
+            expression = expression.replace('log10', 'math.log10')
+            expression = expression.replace('log', 'math.log')
+            expression = expression.replace('exp', 'math.exp')
+            expression = expression.replace('sqrt', 'math.sqrt')
+            expression = expression.replace('cbrt', 'lambda x: x**(1/3)')
+            expression = expression.replace('sin', 'math.sin')
+            expression = expression.replace('cos', 'math.cos')
+            expression = expression.replace('tan', 'math.tan')
+            expression = expression.replace('asin', 'math.asin')
+            expression = expression.replace('acos', 'math.acos')
+            expression = expression.replace('atan', 'math.atan')
+            expression = expression.replace('sinh', 'math.sinh')
+            expression = expression.replace('cosh', 'math.cosh')
+            expression = expression.replace('tanh', 'math.tanh')
+            
+            # Converter unidades angulares
             if self.angle_unit != "RAD":
-                # Converter graus/grados para radianos para funções trigonométricas
                 import re
                 
                 def convert_angle(match):
@@ -844,18 +1643,16 @@ class Calculator(QMainWindow):
                         angle = math.radians(angle)
                     elif self.angle_unit == "GRAD":
                         angle = angle * math.pi / 200
-                    return f"{func}({angle})"
+                    return f"math.{func}({angle})"
                 
-                # Aplicar conversão para funções trigonométricas
                 for trig_func in ['sin', 'cos', 'tan']:
                     pattern = rf'{trig_func}\(([^)]+)\)'
                     expression = re.sub(pattern, convert_angle, expression)
             
-            # Avaliar expressão com segurança
-            # Usar um dicionário de funções matemáticas seguras
+            # Avaliar expressão
             safe_dict = {
+                'math': math,
                 'sqrt': math.sqrt,
-                'cbrt': lambda x: x**(1/3),
                 'sin': math.sin,
                 'cos': math.cos,
                 'tan': math.tan,
@@ -865,35 +1662,33 @@ class Calculator(QMainWindow):
                 'sinh': math.sinh,
                 'cosh': math.cosh,
                 'tanh': math.tanh,
-                'log': math.log10,
-                'ln': math.log,
+                'log': math.log,
+                'log10': math.log10,
                 'exp': math.exp,
-                'factorial': math.factorial,
                 'pi': math.pi,
                 'e': math.e,
                 'abs': abs,
                 'round': round,
                 'int': int,
-                'float': float
+                'float': float,
+                'ans': self.last_result
             }
             
-            # Avaliar
+            safe_dict['cbrt'] = lambda x: x**(1/3)
+            
             result = eval(expression, {"__builtins__": {}}, safe_dict)
             
-            # Arredondar para evitar problemas de precisão
             if isinstance(result, float):
                 result = round(result, 10)
             
-            # Adicionar ao histórico
             self.add_to_history(self.current_expression, result)
             
-            # Atualizar displays
             self.display.setText(str(result))
             self.last_result = result
+            self.variables['ans'] = result
             self.current_expression = str(result)
             self.expression_display.setText("")
             
-            # Atualizar displays do modo programador
             if self.current_mode == "Programador":
                 self.update_programmer_displays(result)
             
@@ -906,14 +1701,32 @@ class Calculator(QMainWindow):
         entry = HistoryEntry(expression, result, self.current_mode)
         self.history.append(entry)
         
-        # Adicionar à lista visual
-        item_text = f"{entry.timestamp}\n{expression} = {result}\n"
+        item_text = f"[{entry.timestamp}] {entry.mode}\n{expression} = {result}\n"
         self.history_list.addItem(item_text)
         self.history_list.scrollToBottom()
+        
+        self.update_memory_display()
+    
+    def update_memory_display(self):
+        """Atualizar display de memória"""
+        self.memory_list.setRowCount(len(self.memory))
+        
+        for i, (key, value) in enumerate(self.memory.items()):
+            self.memory_list.setItem(i, 0, QTableWidgetItem(key))
+            self.memory_list.setItem(i, 1, QTableWidgetItem(str(value)))
+            
+            btn_recall = QPushButton("MR")
+            btn_recall.clicked.connect(lambda checked, k=key: self.memory_recall_key(k))
+            self.memory_list.setCellWidget(i, 2, btn_recall)
+    
+    def filter_history(self, text):
+        """Filtrar histórico"""
+        for i in range(self.history_list.count()):
+            item = self.history_list.item(i)
+            item.setHidden(text.lower() not in item.text().lower())
     
     def history_item_clicked(self, item):
         """Clicar em item do histórico"""
-        # Extrair resultado do item
         text = item.text()
         lines = text.split('\n')
         if len(lines) >= 2:
@@ -943,6 +1756,195 @@ class Calculator(QMainWindow):
             self.history.clear()
             self.history_list.clear()
             self.statusBar().showMessage("Histórico limpo", 2000)
+    
+    def export_history(self):
+        """Exportar histórico para JSON"""
+        if not self.history:
+            QMessageBox.warning(self, "Exportar", "Não há histórico para exportar.")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar Histórico", "",
+            "Arquivos JSON (*.json);;Todos os Arquivos (*.*)"
+        )
+        
+        if file_path:
+            try:
+                data = {
+                    'export_date': datetime.now().isoformat(),
+                    'version': '2.0',
+                    'history': [entry.to_dict() for entry in self.history]
+                }
+                
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                
+                self.statusBar().showMessage(f"Histórico exportado para {file_path}", 3000)
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao exportar: {str(e)}")
+    
+    def import_history(self):
+        """Importar histórico de JSON"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Importar Histórico", "",
+            "Arquivos JSON (*.json);;Todos os Arquivos (*.*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                self.history.clear()
+                self.history_list.clear()
+                
+                for entry_data in data['history']:
+                    entry = HistoryEntry.from_dict(entry_data)
+                    self.history.append(entry)
+                    
+                    item_text = f"[{entry.timestamp}] {entry.mode}\n{entry.expression} = {entry.result}\n"
+                    self.history_list.addItem(item_text)
+                
+                self.statusBar().showMessage(f"Histórico importado de {file_path}", 3000)
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao importar: {str(e)}")
+    
+    def memory_store(self):
+        """Guardar valor na memória"""
+        if self.display.text():
+            key, ok = QInputDialog.getText(self, "Guardar na Memória", 
+                                           "Nome da variável:")
+            if ok and key:
+                try:
+                    value = float(self.display.text())
+                    self.memory[key] = value
+                    self.update_memory_display()
+                    self.statusBar().showMessage(f"Valor {value} guardado em '{key}'", 2000)
+                except:
+                    pass
+    
+    def memory_recall(self):
+        """Recuperar valor da memória"""
+        if self.memory:
+            key, ok = QInputDialog.getItem(self, "Recuperar da Memória",
+                                          "Selecione a variável:",
+                                          list(self.memory.keys()), 0, False)
+            if ok and key:
+                self.current_expression += str(self.memory[key])
+                self.update_displays()
+    
+    def memory_clear(self):
+        """Limpar memória"""
+        self.memory.clear()
+        self.memory_list.setRowCount(0)
+        self.statusBar().showMessage("Memória limpa", 2000)
+    
+    def memory_store_dialog(self):
+        """Diálogo para guardar na memória"""
+        if self.display.text():
+            key, ok = QInputDialog.getText(self, "Guardar na Memória", 
+                                           "Nome da variável:")
+            if ok and key:
+                try:
+                    value = float(self.display.text())
+                    self.memory[key] = value
+                    self.update_memory_display()
+                    self.statusBar().showMessage(f"Valor {value} guardado em '{key}'", 2000)
+                except:
+                    pass
+    
+    def memory_recall_dialog(self):
+        """Diálogo para recuperar da memória"""
+        if self.memory:
+            key, ok = QInputDialog.getItem(self, "Recuperar da Memória",
+                                          "Selecione a variável:",
+                                          list(self.memory.keys()), 0, False)
+            if ok and key:
+                self.current_expression += str(self.memory[key])
+                self.update_displays()
+    
+    def memory_recall_key(self, key):
+        """Recuperar valor específico da memória"""
+        if key in self.memory:
+            self.current_expression += str(self.memory[key])
+            self.update_displays()
+    
+    def memory_clear_all(self):
+        """Limpar toda a memória"""
+        self.memory.clear()
+        self.memory_list.setRowCount(0)
+        self.statusBar().showMessage("Toda memória limpa", 2000)
+    
+    def special_function(self, func):
+        """Processar funções especiais"""
+        try:
+            value = float(self.display.text()) if self.display.text() else 0
+            
+            if func == "!":
+                result = math.factorial(int(value))
+            elif func == "floor":
+                result = math.floor(value)
+            elif func == "round":
+                result = round(value)
+            elif func == "rand":
+                result = random.random()
+            elif func == "abs":
+                result = abs(value)
+            elif func == "isprime":
+                result = self.is_prime(int(value))
+            else:
+                return
+            
+            self.display.setText(str(result))
+            self.last_result = result
+            self.current_expression = str(result)
+            
+        except Exception as e:
+            self.statusBar().showMessage(f"Erro: {str(e)}", 2000)
+    
+    def is_prime(self, n):
+        """Verificar se número é primo"""
+        if n < 2:
+            return False
+        for i in range(2, int(math.sqrt(n)) + 1):
+            if n % i == 0:
+                return False
+        return True
+    
+    def insert_constant(self, const):
+        """Inserir constante"""
+        constants = {
+            'pi': math.pi,
+            'e': math.e,
+            'phi': (1 + math.sqrt(5)) / 2,
+            'gamma': 0.5772156649015329
+        }
+        
+        self.current_expression += str(constants.get(const, 0))
+        self.update_displays()
+    
+    def quick_convert(self, conv):
+        """Conversões rápidas"""
+        try:
+            value = float(self.display.text()) if self.display.text() else 0
+            
+            conversions = {
+                'c_to_f': value * 9/5 + 32,
+                'f_to_c': (value - 32) * 5/9,
+                'km_to_mi': value * 0.621371,
+                'mi_to_km': value * 1.60934,
+                'kg_to_lb': value * 2.20462,
+                'lb_to_kg': value * 0.453592
+            }
+            
+            result = conversions.get(conv, value)
+            self.display.setText(str(result))
+            self.last_result = result
+            self.current_expression = str(result)
+            
+        except Exception as e:
+            self.statusBar().showMessage(f"Erro: {str(e)}", 2000)
     
     def clear_all(self):
         """Limpar tudo"""
@@ -976,35 +1978,9 @@ class Calculator(QMainWindow):
         self.expression_display.setText(self.current_expression)
         if self.current_expression:
             try:
-                # Tentar avaliar para mostrar resultado parcial
                 result = eval(self.current_expression.replace('^', '**'))
                 if isinstance(result, (int, float)):
                     self.display.setText(str(result))
-            except:
-                pass
-    
-    def update_base_displays(self):
-        """Atualizar displays de bases (modo programador)"""
-        if self.current_mode == "Programador" and self.current_expression:
-            try:
-                # Tentar converter valor atual para diferentes bases
-                value = int(float(self.current_expression))
-                
-                # Aplicar máscara de bits
-                mask = (1 << self.word_size) - 1
-                value = value & mask
-                
-                # Atualizar displays
-                self.hex_display.setText(hex(value)[2:].upper())
-                self.dec_display.setText(str(value))
-                self.oct_display.setText(oct(value)[2:])
-                self.bin_display.setText(bin(value)[2:])
-                
-                # Display binário formatado
-                bin_str = bin(value)[2:].zfill(self.word_size)
-                formatted_bin = ' '.join([bin_str[i:i+4] for i in range(0, len(bin_str), 4)])
-                self.binary_display.setText(formatted_bin)
-                
             except:
                 pass
     
@@ -1013,17 +1989,14 @@ class Calculator(QMainWindow):
         try:
             int_value = int(float(value))
             
-            # Aplicar máscara de bits
             mask = (1 << self.word_size) - 1
             int_value = int_value & mask
             
-            # Atualizar displays
             self.hex_display.setText(hex(int_value)[2:].upper())
             self.dec_display.setText(str(int_value))
             self.oct_display.setText(oct(int_value)[2:])
             self.bin_display.setText(bin(int_value)[2:])
             
-            # Display binário formatado
             bin_str = bin(int_value)[2:].zfill(self.word_size)
             formatted_bin = ' '.join([bin_str[i:i+4] for i in range(0, len(bin_str), 4)])
             self.binary_display.setText(formatted_bin)
@@ -1031,66 +2004,31 @@ class Calculator(QMainWindow):
         except:
             pass
     
-    def export_history(self):
-        """Exportar histórico para JSON"""
-        if not self.history:
-            QMessageBox.warning(self, "Exportar", "Não há histórico para exportar.")
-            return
-        
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Exportar Histórico", "",
-            "Arquivos JSON (*.json);;Todos os Arquivos (*.*)"
-        )
-        
-        if file_path:
-            try:
-                data = {
-                    'export_date': datetime.now().isoformat(),
-                    'mode': self.current_mode,
-                    'history': [entry.to_dict() for entry in self.history]
-                }
-                
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-                
-                self.statusBar().showMessage(f"Histórico exportado para {file_path}", 3000)
-            except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Erro ao exportar: {str(e)}")
+    def show_function_calc(self):
+        """Mostrar calculadora de funções"""
+        self.function_calc = FunctionPlotter(self)
+        self.function_calc.show()
     
-    def import_history(self):
-        """Importar histórico de JSON"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Importar Histórico", "",
-            "Arquivos JSON (*.json);;Todos os Arquivos (*.*)"
-        )
-        
-        if file_path:
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                # Limpar histórico atual
-                self.history.clear()
-                self.history_list.clear()
-                
-                # Importar novos dados
-                for entry_data in data['history']:
-                    entry = HistoryEntry.from_dict(entry_data)
-                    self.history.append(entry)
-                    
-                    item_text = f"{entry.timestamp}\n{entry.expression} = {entry.result}\n"
-                    self.history_list.addItem(item_text)
-                
-                self.statusBar().showMessage(f"Histórico importado de {file_path}", 3000)
-                
-            except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Erro ao importar: {str(e)}")
+    def show_matrix_calc(self):
+        """Mostrar calculadora de matrizes"""
+        self.matrix_calc = MatrixCalculator(self)
+        self.matrix_calc.show()
+    
+    def show_stats_calc(self):
+        """Mostrar calculadora estatística"""
+        self.stats_calc = StatisticsCalculator(self)
+        self.stats_calc.show()
+    
+    def show_unit_converter(self):
+        """Mostrar conversor de unidades"""
+        self.unit_converter = UnitConverter(self)
+        self.unit_converter.show()
     
     def show_about(self):
         """Mostrar diálogo sobre"""
         about_text = """
-        <h2>Calculadora Multi-Modo</h2>
-        <p><b>Versão:</b> 1.0.0</p>
+        <h2>Calculadora Avançada</h2>
+        <p><b>Versão:</b> 2.0.0</p>
         
         <h3>Modos disponíveis:</h3>
         <ul>
@@ -1099,25 +2037,27 @@ class Calculator(QMainWindow):
             <li><b>Programador:</b> Operações lógicas, diferentes bases numéricas</li>
         </ul>
         
-        <h3>Funcionalidades:</h3>
+        <h3>Ferramentas incluídas:</h3>
         <ul>
-            <li>Histórico de cálculos</li>
-            <li>Exportar/Importar histórico em JSON</li>
-            <li>Conversão entre bases (modo programador)</li>
-            <li>Unidades angulares (DEG, RAD, GRAD)</li>
+            <li>📈 Calculadora de Funções</li>
+            <li>🔢 Calculadora de Matrizes</li>
+            <li>📊 Calculadora Estatística</li>
+            <li>📏 Conversor de Unidades</li>
+            <li>💾 Memória de variáveis</li>
+            <li>📋 Histórico com exportação JSON</li>
         </ul>
         
-        <h3>Desenvolvido com auxílio do DeepSeek</h3>
-        <p>Όχι, ο Χρόνος δεν είναι ο άρχοντας της γνώσης</p>
+        <h3>Desenvolvido com:</h3>
+        <p>Python 3 + PyQt5</p>
         """
         
         QMessageBox.about(self, "Sobre a Calculadora", about_text)
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("Calculadora Multi-Modo")
+    app.setApplicationName("Calculadora Avançada")
     
-    calculator = Calculator()
+    calculator = EnhancedCalculator()
     calculator.show()
     
     sys.exit(app.exec_())
