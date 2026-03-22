@@ -1,0 +1,1273 @@
+import sys
+import json
+import os
+import base64
+from datetime import datetime
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
+
+# Importar bibliotecas de criptografia
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+    print("Aviso: Biblioteca 'cryptography' não instalada. Funcionalidade de criptografia desabilitada.")
+
+class SimpleTextEditor(QMainWindow):
+    """
+    Editor de texto simples que salva arquivos em formato JSON com suporte a criptografia
+    Versão com criptografia por senha
+    """
+    
+    def __init__(self):
+        super().__init__()
+        
+        # Configurações da janela
+        self.setWindowTitle("简易编辑器 - 带加密的JSON记事本")
+        self.setGeometry(100, 100, 900, 600)
+        
+        # Variáveis de estado
+        self.current_file = None
+        self.is_modified = False
+        self.search_text = ""
+        self.replace_text = ""
+        self.is_encrypted = False  # Indica se o arquivo atual está criptografado
+        
+        # Configurar interface
+        self.init_ui()
+        
+        # Aplicar estilo
+        self.apply_style()
+        
+        # Mostrar boas-vindas
+        self.show_welcome()
+    
+    def init_ui(self):
+        """Inicializar interface do usuário"""
+        
+        # ========== BARRA DE MENUS ==========
+        menubar = self.menuBar()
+        
+        # Menu Arquivo
+        file_menu = menubar.addMenu("文件(&F)")
+        
+        # Ações do menu Arquivo
+        new_action = QAction("新建(&N)", self)
+        new_action.setShortcut("Ctrl+N")
+        new_action.setStatusTip("创建新文件")
+        new_action.triggered.connect(self.new_file)
+        file_menu.addAction(new_action)
+        
+        open_action = QAction("打开(&O)...", self)
+        open_action.setShortcut("Ctrl+O")
+        open_action.setStatusTip("打开现有文件")
+        open_action.triggered.connect(self.open_file)
+        file_menu.addAction(open_action)
+        
+        save_action = QAction("保存(&S)", self)
+        save_action.setShortcut("Ctrl+S")
+        save_action.setStatusTip("保存当前文件")
+        save_action.triggered.connect(self.save_file)
+        file_menu.addAction(save_action)
+        
+        save_as_action = QAction("另存为(&A)...", self)
+        save_as_action.setShortcut("Ctrl+Shift+S")
+        save_as_action.setStatusTip("以新名称保存文件")
+        save_as_action.triggered.connect(self.save_file_as)
+        file_menu.addAction(save_as_action)
+        
+        file_menu.addSeparator()
+        
+        # Ação para salvar com senha
+        self.save_encrypted_action = QAction("加密保存(&E)...", self)
+        self.save_encrypted_action.setShortcut("Ctrl+E")
+        self.save_encrypted_action.setStatusTip("使用密码加密保存文件")
+        self.save_encrypted_action.triggered.connect(self.save_encrypted_file)
+        if not CRYPTO_AVAILABLE:
+            self.save_encrypted_action.setEnabled(False)
+            self.save_encrypted_action.setToolTip("功能不可用 - 请安装 'cryptography' 库")
+        file_menu.addAction(self.save_encrypted_action)
+        
+        file_menu.addSeparator()
+        
+        export_txt_action = QAction("导出为TXT(&T)...", self)
+        export_txt_action.setStatusTip("导出为纯文本文件")
+        export_txt_action.triggered.connect(self.export_as_txt)
+        file_menu.addAction(export_txt_action)
+        
+        file_menu.addSeparator()
+        
+        exit_action = QAction("退出(&X)", self)
+        exit_action.setShortcut("Ctrl+Q")
+        exit_action.setStatusTip("退出程序")
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # Menu Editar
+        edit_menu = menubar.addMenu("编辑(&E)")
+        
+        undo_action = QAction("撤销(&U)", self)
+        undo_action.setShortcut("Ctrl+Z")
+        undo_action.triggered.connect(self.undo)
+        edit_menu.addAction(undo_action)
+        
+        redo_action = QAction("重做(&R)", self)
+        redo_action.setShortcut("Ctrl+Y")
+        redo_action.triggered.connect(self.redo)
+        edit_menu.addAction(redo_action)
+        
+        edit_menu.addSeparator()
+        
+        cut_action = QAction("剪切(&T)", self)
+        cut_action.setShortcut("Ctrl+X")
+        cut_action.triggered.connect(self.cut)
+        edit_menu.addAction(cut_action)
+        
+        copy_action = QAction("复制(&C)", self)
+        copy_action.setShortcut("Ctrl+C")
+        copy_action.triggered.connect(self.copy)
+        edit_menu.addAction(copy_action)
+        
+        paste_action = QAction("粘贴(&P)", self)
+        paste_action.setShortcut("Ctrl+V")
+        paste_action.triggered.connect(self.paste)
+        edit_menu.addAction(paste_action)
+        
+        edit_menu.addSeparator()
+        
+        select_all_action = QAction("全选(&A)", self)
+        select_all_action.setShortcut("Ctrl+A")
+        select_all_action.triggered.connect(self.select_all)
+        edit_menu.addAction(select_all_action)
+        
+        # Menu Localizar
+        search_menu = menubar.addMenu("查找(&F)")
+        
+        find_action = QAction("查找(&F)...", self)
+        find_action.setShortcut("Ctrl+F")
+        find_action.triggered.connect(self.show_search)
+        search_menu.addAction(find_action)
+        
+        find_next_action = QAction("查找下一个(&N)", self)
+        find_next_action.setShortcut("F3")
+        find_next_action.triggered.connect(self.find_next)
+        search_menu.addAction(find_next_action)
+        
+        replace_action = QAction("替换(&R)...", self)
+        replace_action.setShortcut("Ctrl+H")
+        replace_action.triggered.connect(self.show_replace)
+        search_menu.addAction(replace_action)
+        
+        # Menu Exibir
+        view_menu = menubar.addMenu("视图(&V)")
+        
+        word_wrap_action = QAction("自动换行(&W)", self)
+        word_wrap_action.setCheckable(True)
+        word_wrap_action.setChecked(True)
+        word_wrap_action.triggered.connect(self.toggle_word_wrap)
+        view_menu.addAction(word_wrap_action)
+        
+        toolbar_action = QAction("工具栏(&T)", self)
+        toolbar_action.setCheckable(True)
+        toolbar_action.setChecked(True)
+        toolbar_action.triggered.connect(self.toggle_toolbar)
+        view_menu.addAction(toolbar_action)
+        
+        statusbar_action = QAction("状态栏(&S)", self)
+        statusbar_action.setCheckable(True)
+        statusbar_action.setChecked(True)
+        statusbar_action.triggered.connect(self.toggle_statusbar)
+        view_menu.addAction(statusbar_action)
+        
+        view_menu.addSeparator()
+        
+        zoom_in_action = QAction("放大(&Z)", self)
+        zoom_in_action.setShortcut("Ctrl++")
+        zoom_in_action.triggered.connect(self.zoom_in)
+        view_menu.addAction(zoom_in_action)
+        
+        zoom_out_action = QAction("缩小(&O)", self)
+        zoom_out_action.setShortcut("Ctrl+-")
+        zoom_out_action.triggered.connect(self.zoom_out)
+        view_menu.addAction(zoom_out_action)
+        
+        zoom_reset_action = QAction("重置缩放(&R)", self)
+        zoom_reset_action.setShortcut("Ctrl+0")
+        zoom_reset_action.triggered.connect(self.zoom_reset)
+        view_menu.addAction(zoom_reset_action)
+        
+        # Menu Ajuda
+        help_menu = menubar.addMenu("帮助(&H)")
+        
+        about_action = QAction("关于(&A)", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+        
+        # ========== BARRA DE FERRAMENTAS ==========
+        self.toolbar = QToolBar("工具栏")
+        self.toolbar.setIconSize(QSize(24, 24))
+        self.addToolBar(self.toolbar)
+        
+        # Botões da barra de ferramentas
+        btn_new = QAction(QIcon.fromTheme("document-new"), "新建", self)
+        btn_new.setStatusTip("新建文件")
+        btn_new.triggered.connect(self.new_file)
+        self.toolbar.addAction(btn_new)
+        
+        btn_open = QAction(QIcon.fromTheme("document-open"), "打开", self)
+        btn_open.setStatusTip("打开文件")
+        btn_open.triggered.connect(self.open_file)
+        self.toolbar.addAction(btn_open)
+        
+        btn_save = QAction(QIcon.fromTheme("document-save"), "保存", self)
+        btn_save.setStatusTip("保存文件")
+        btn_save.triggered.connect(self.save_file)
+        self.toolbar.addAction(btn_save)
+        
+        self.toolbar.addSeparator()
+        
+        btn_cut = QAction(QIcon.fromTheme("edit-cut"), "剪切", self)
+        btn_cut.setStatusTip("剪切")
+        btn_cut.triggered.connect(self.cut)
+        self.toolbar.addAction(btn_cut)
+        
+        btn_copy = QAction(QIcon.fromTheme("edit-copy"), "复制", self)
+        btn_copy.setStatusTip("复制")
+        btn_copy.triggered.connect(self.copy)
+        self.toolbar.addAction(btn_copy)
+        
+        btn_paste = QAction(QIcon.fromTheme("edit-paste"), "粘贴", self)
+        btn_paste.setStatusTip("粘贴")
+        btn_paste.triggered.connect(self.paste)
+        self.toolbar.addAction(btn_paste)
+        
+        self.toolbar.addSeparator()
+        
+        btn_undo = QAction(QIcon.fromTheme("edit-undo"), "撤销", self)
+        btn_undo.setStatusTip("撤销")
+        btn_undo.triggered.connect(self.undo)
+        self.toolbar.addAction(btn_undo)
+        
+        btn_redo = QAction(QIcon.fromTheme("edit-redo"), "重做", self)
+        btn_redo.setStatusTip("重做")
+        btn_redo.triggered.connect(self.redo)
+        self.toolbar.addAction(btn_redo)
+        
+        self.toolbar.addSeparator()
+        
+        btn_find = QAction(QIcon.fromTheme("edit-find"), "查找", self)
+        btn_find.setStatusTip("查找文本")
+        btn_find.triggered.connect(self.show_search)
+        self.toolbar.addAction(btn_find)
+        
+        # ========== ÁREA CENTRAL ==========
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Área de texto
+        self.text_area = QPlainTextEdit()
+        self.text_area.setFont(QFont("Consolas", 11))
+        self.text_area.textChanged.connect(self.on_text_changed)
+        self.text_area.cursorPositionChanged.connect(self.on_cursor_position_changed)
+        layout.addWidget(self.text_area)
+        
+        # Barra de localização (inicialmente oculta)
+        self.search_bar = QWidget()
+        self.search_bar.setObjectName("search-bar")
+        search_layout = QHBoxLayout(self.search_bar)
+        search_layout.setContentsMargins(5, 5, 5, 5)
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("查找...")
+        self.search_input.textChanged.connect(self.on_search_text_changed)
+        self.search_input.returnPressed.connect(self.find_next)
+        
+        self.replace_input = QLineEdit()
+        self.replace_input.setPlaceholderText("替换为...")
+        self.replace_input.returnPressed.connect(self.replace_current)
+        self.replace_input.hide()
+        
+        btn_find_prev = QPushButton("⬆")
+        btn_find_prev.setToolTip("上一个")
+        btn_find_prev.setMaximumWidth(30)
+        btn_find_prev.clicked.connect(self.find_previous)
+        
+        btn_find_next = QPushButton("⬇")
+        btn_find_next.setToolTip("下一个")
+        btn_find_next.setMaximumWidth(30)
+        btn_find_next.clicked.connect(self.find_next)
+        
+        self.btn_replace = QPushButton("替换")
+        self.btn_replace.setToolTip("替换当前匹配项")
+        self.btn_replace.hide()
+        self.btn_replace.clicked.connect(self.replace_current)
+        
+        self.btn_replace_all = QPushButton("全部替换")
+        self.btn_replace_all.setToolTip("替换所有匹配项")
+        self.btn_replace_all.hide()
+        self.btn_replace_all.clicked.connect(self.replace_all)
+        
+        btn_close_search = QPushButton("✕")
+        btn_close_search.setToolTip("关闭")
+        btn_close_search.setMaximumWidth(30)
+        btn_close_search.clicked.connect(self.hide_search)
+        
+        search_layout.addWidget(QLabel("🔍"))
+        search_layout.addWidget(self.search_input)
+        search_layout.addWidget(btn_find_prev)
+        search_layout.addWidget(btn_find_next)
+        search_layout.addWidget(self.replace_input)
+        search_layout.addWidget(self.btn_replace)
+        search_layout.addWidget(self.btn_replace_all)
+        search_layout.addStretch()
+        search_layout.addWidget(btn_close_search)
+        
+        layout.addWidget(self.search_bar)
+        self.search_bar.hide()
+        
+        # ========== BARRA DE STATUS ==========
+        self.status_bar = self.statusBar()
+        
+        # Label de posição do cursor
+        self.position_label = QLabel("行 1, 列 1")
+        self.status_bar.addPermanentWidget(self.position_label)
+        
+        # Label de modo de inserção
+        self.mode_label = QLabel("插入")
+        self.status_bar.addPermanentWidget(self.mode_label)
+        
+        # Label de tamanho do arquivo
+        self.size_label = QLabel("0 字符")
+        self.status_bar.addPermanentWidget(self.size_label)
+        
+        # Label de status de criptografia
+        self.encrypt_label = QLabel("🔓")
+        self.encrypt_label.setToolTip("未加密文件")
+        self.status_bar.addPermanentWidget(self.encrypt_label)
+    
+    def apply_style(self):
+        """Aplicar estilo visual"""
+        style = """
+        QMainWindow {
+            background-color: #f5f5f5;
+        }
+        QPlainTextEdit {
+            background-color: white;
+            color: #2c3e50;
+            border: none;
+            selection-background-color: #3498db;
+            selection-color: white;
+        }
+        QToolBar {
+            background-color: #ecf0f1;
+            border: none;
+            spacing: 5px;
+            padding: 5px;
+        }
+        QToolBar QToolButton {
+            background-color: transparent;
+            border: none;
+            border-radius: 3px;
+            padding: 5px;
+        }
+        QToolBar QToolButton:hover {
+            background-color: #bdc3c7;
+        }
+        QToolBar QToolButton:pressed {
+            background-color: #95a5a6;
+        }
+        QMenuBar {
+            background-color: #34495e;
+            color: white;
+        }
+        QMenuBar::item {
+            background-color: transparent;
+            padding: 5px 10px;
+        }
+        QMenuBar::item:selected {
+            background-color: #2c3e50;
+        }
+        QMenu {
+            background-color: white;
+            border: 1px solid #bdc3c7;
+        }
+        QMenu::item {
+            padding: 5px 30px 5px 20px;
+        }
+        QMenu::item:selected {
+            background-color: #3498db;
+            color: white;
+        }
+        QStatusBar {
+            background-color: #34495e;
+            color: white;
+        }
+        #search-bar {
+            background-color: #ecf0f1;
+            border-top: 1px solid #bdc3c7;
+        }
+        QLineEdit {
+            padding: 5px;
+            border: 1px solid #bdc3c7;
+            border-radius: 3px;
+            background-color: white;
+        }
+        QLineEdit:focus {
+            border-color: #3498db;
+        }
+        QPushButton {
+            padding: 5px 10px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 3px;
+        }
+        QPushButton:hover {
+            background-color: #2980b9;
+        }
+        QPushButton:pressed {
+            background-color: #1c6ea4;
+        }
+        """
+        self.setStyleSheet(style)
+    
+    def show_welcome(self):
+        """Mostrar mensagem de boas-vindas"""
+        welcome_text = """# 简易编辑器 - 带加密的JSON记事本
+
+## 📝 欢迎！
+
+这是一个支持加密的JSON格式文本编辑器。
+
+### ✨ 功能特点：
+- ✅ 以JSON格式保存文件
+- ✅ 密码加密（AES-256）
+- ✅ 打开加密和未加密文件
+- ✅ 查找和替换文本
+- ✅ 撤销/重做
+- ✅ 自动换行
+- ✅ 可调节缩放
+
+### 🔒 如何使用加密：
+- 使用 **Ctrl+E** 或 文件菜单 > “加密保存...”
+- 输入一个强密码来保护您的文件
+- 文件将以 .json 扩展名保存（但内容已加密）
+- 打开加密文件时，将提示输入密码
+
+### 🚀 使用方法：
+- 使用 **Ctrl+N** 新建文件
+- 使用 **Ctrl+O** 打开文件
+- 使用 **Ctrl+S** 保存（无加密）
+- 使用 **Ctrl+E** 加密保存
+- 使用 **Ctrl+F** 查找
+- 使用 **Ctrl+H** 替换
+
+### 📁 JSON格式：
+文件保存时包含元数据：
+- 创建和修改日期
+- 字符、单词和行数
+- 加密状态指示
+
+尽情使用！🎉
+"""
+        self.text_area.setPlainText(welcome_text)
+        self.current_file = None
+        self.is_modified = False
+        self.is_encrypted = False
+        self.update_window_title()
+        self.update_encrypt_label()
+    
+    def on_text_changed(self):
+        """Quando o texto muda"""
+        self.is_modified = True
+        self.update_window_title()
+        self.update_size_label()
+    
+    def on_cursor_position_changed(self):
+        """Quando o cursor muda de posição"""
+        cursor = self.text_area.textCursor()
+        line = cursor.blockNumber() + 1
+        col = cursor.columnNumber() + 1
+        self.position_label.setText(f"行 {line}, 列 {col}")
+    
+    def update_window_title(self):
+        """Atualizar título da janela"""
+        title = "简易编辑器"
+        if self.current_file:
+            title += f" - {os.path.basename(self.current_file)}"
+        if self.is_encrypted:
+            title += " [已加密]"
+        if self.is_modified:
+            title += " *"
+        self.setWindowTitle(title)
+    
+    def update_size_label(self):
+        """Atualizar label de tamanho"""
+        text = self.text_area.toPlainText()
+        chars = len(text)
+        words = len(text.split())
+        lines = text.count('\n') + 1
+        
+        self.size_label.setText(f"{chars} 字符 | {words} 单词 | {lines} 行")
+    
+    def update_encrypt_label(self):
+        """Atualizar label de criptografia na barra de status"""
+        if self.is_encrypted:
+            self.encrypt_label.setText("🔒")
+            self.encrypt_label.setToolTip("加密文件")
+        else:
+            self.encrypt_label.setText("🔓")
+            self.encrypt_label.setToolTip("未加密文件")
+    
+    # ========== FUNÇÕES DE CRIPTOGRAFIA ==========
+    
+    def derive_key(self, password: str, salt: bytes = None) -> tuple:
+        """Derivar chave a partir da senha usando PBKDF2"""
+        if salt is None:
+            salt = os.urandom(16)
+        
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+        return key, salt
+    
+    def encrypt_content(self, content: str, password: str) -> dict:
+        """Criptografar o conteúdo com a senha"""
+        if not CRYPTO_AVAILABLE:
+            raise Exception("Biblioteca 'cryptography' não está instalada")
+        
+        # Gerar salt aleatório
+        salt = os.urandom(16)
+        
+        # Derivar chave
+        key, _ = self.derive_key(password, salt)
+        
+        # Criar cipher
+        f = Fernet(key)
+        
+        # Criptografar o conteúdo
+        encrypted_data = f.encrypt(content.encode('utf-8'))
+        
+        # Retornar dados criptografados com salt
+        return {
+            'encrypted': True,
+            'salt': base64.b64encode(salt).decode(),
+            'data': base64.b64encode(encrypted_data).decode(),
+            'algorithm': 'AES-256-CBC',
+            'key_derivation': 'PBKDF2-HMAC-SHA256'
+        }
+    
+    def decrypt_content(self, encrypted_data: dict, password: str) -> str:
+        """Descriptografar o conteúdo com a senha"""
+        if not CRYPTO_AVAILABLE:
+            raise Exception("Biblioteca 'cryptography' não está instalada")
+        
+        # Verificar se é um arquivo criptografado
+        if not encrypted_data.get('encrypted', False):
+            return None
+        
+        try:
+            # Recuperar salt
+            salt = base64.b64decode(encrypted_data['salt'])
+            
+            # Derivar chave
+            key, _ = self.derive_key(password, salt)
+            
+            # Criar cipher
+            f = Fernet(key)
+            
+            # Descriptografar
+            encrypted_content = base64.b64decode(encrypted_data['data'])
+            decrypted_content = f.decrypt(encrypted_content)
+            
+            return decrypted_content.decode('utf-8')
+        except Exception as e:
+            raise Exception("密码错误或文件损坏")
+    
+    def get_password(self, title="密码", message="请输入密码：", is_new=False):
+        """Dialog para obter senha do usuário"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setModal(True)
+        layout = QVBoxLayout()
+        
+        # Mensagem
+        label = QLabel(message)
+        layout.addWidget(label)
+        
+        # Campo de senha
+        password_input = QLineEdit()
+        password_input.setEchoMode(QLineEdit.Password)
+        layout.addWidget(password_input)
+        
+        if is_new:
+            # Confirmar senha
+            label_confirm = QLabel("确认密码：")
+            layout.addWidget(label_confirm)
+            
+            confirm_input = QLineEdit()
+            confirm_input.setEchoMode(QLineEdit.Password)
+            layout.addWidget(confirm_input)
+        
+        # Botões
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.setLayout(layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            password = password_input.text()
+            if is_new:
+                confirm = confirm_input.text()
+                if password != confirm:
+                    QMessageBox.warning(self, "错误", "两次输入的密码不一致！")
+                    return None
+                if not password:
+                    QMessageBox.warning(self, "错误", "密码不能为空！")
+                    return None
+            return password
+        
+        return None
+    
+    def save_encrypted_file(self):
+        """Salvar arquivo com criptografia"""
+        if not CRYPTO_AVAILABLE:
+            QMessageBox.critical(self, "错误", 
+                               "未安装 'cryptography' 库。\n"
+                               "请使用以下命令安装：pip install cryptography")
+            return
+        
+        # Verificar se precisa salvar antes
+        if self.is_modified and self.current_file and not self.is_encrypted:
+            reply = QMessageBox.question(
+                self, "保存？",
+                "当前文件未保存。是否先保存？",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            if reply == QMessageBox.Cancel:
+                return
+            elif reply == QMessageBox.Yes:
+                self.save_file()
+        
+        # Escolher local para salvar
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "加密保存文件", "",
+            "JSON文件 (*.json);;所有文件 (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        # Obter senha
+        password = self.get_password("加密文件", 
+                                     "请输入密码以保护文件：", 
+                                     is_new=True)
+        if not password:
+            return
+        
+        try:
+            content = self.text_area.toPlainText()
+            
+            # Criar metadados
+            metadata = {
+                'created': datetime.now().isoformat() if not self.current_file else None,
+                'modified': datetime.now().isoformat(),
+                'characters': len(content),
+                'words': len(content.split()),
+                'lines': content.count('\n') + 1
+            }
+            
+            # Criptografar o conteúdo
+            encrypted_data = self.encrypt_content(content, password)
+            
+            # Salvar dados criptografados com metadados
+            save_data = {
+                'encrypted': True,
+                'metadata': metadata,
+                'crypto_info': encrypted_data
+            }
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(save_data, f, indent=2, ensure_ascii=False)
+            
+            self.current_file = file_path
+            self.is_modified = False
+            self.is_encrypted = True
+            self.update_window_title()
+            self.update_encrypt_label()
+            self.status_bar.showMessage(f"加密文件已保存：{file_path}", 5000)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存加密文件时出错：\n{str(e)}")
+    
+    def save_to_file(self, file_path):
+        """Salvar conteúdo no arquivo (sem criptografia)"""
+        try:
+            content = self.text_area.toPlainText()
+            
+            if file_path.endswith('.json'):
+                # Salvar com metadados
+                data = {
+                    'encrypted': False,
+                    'content': content,
+                    'metadata': {
+                        'created': datetime.now().isoformat() if not self.current_file else None,
+                        'modified': datetime.now().isoformat(),
+                        'characters': len(content),
+                        'words': len(content.split()),
+                        'lines': content.count('\n') + 1
+                    }
+                }
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+            else:
+                # Salvar como texto simples
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            
+            self.current_file = file_path
+            self.is_modified = False
+            self.is_encrypted = False
+            self.update_window_title()
+            self.update_encrypt_label()
+            self.status_bar.showMessage(f"文件已保存：{file_path}", 3000)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存文件时出错：\n{str(e)}")
+    
+    def open_file(self):
+        """Abrir arquivo"""
+        if not self.check_save():
+            return
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "打开文件", "",
+            "JSON文件 (*.json);;文本文件 (*.txt);;所有文件 (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            if file_path.endswith('.json'):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    
+                    # Verificar se é arquivo criptografado
+                    if isinstance(data, dict) and data.get('encrypted', False):
+                        # Solicitar senha
+                        password = self.get_password("加密文件", 
+                                                    "此文件已加密。\n请输入密码以打开：")
+                        if not password:
+                            return
+                        
+                        # Descriptografar
+                        content = self.decrypt_content(data['crypto_info'], password)
+                        if content is None:
+                            QMessageBox.critical(self, "错误", "解密文件失败。")
+                            return
+                        
+                        self.text_area.setPlainText(content)
+                        self.is_encrypted = True
+                    else:
+                        # Arquivo normal
+                        if isinstance(data, dict) and 'content' in data:
+                            content = data['content']
+                        else:
+                            content = str(data)
+                        self.text_area.setPlainText(content)
+                        self.is_encrypted = False
+            else:
+                # Arquivo de texto simples
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    self.text_area.setPlainText(content)
+                self.is_encrypted = False
+            
+            self.current_file = file_path
+            self.is_modified = False
+            self.update_window_title()
+            self.update_size_label()
+            self.update_encrypt_label()
+            self.status_bar.showMessage(f"文件已加载：{file_path}", 3000)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"打开文件时出错：\n{str(e)}")
+    
+    def new_file(self):
+        """Criar novo arquivo"""
+        if self.check_save():
+            self.text_area.clear()
+            self.current_file = None
+            self.is_modified = False
+            self.is_encrypted = False
+            self.update_window_title()
+            self.update_size_label()
+            self.update_encrypt_label()
+            self.status_bar.showMessage("已创建新文件", 3000)
+    
+    def export_as_txt(self):
+        """Exportar como TXT"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "导出为TXT", "",
+            "文本文件 (*.txt);;所有文件 (*.*)"
+        )
+        
+        if file_path:
+            try:
+                content = self.text_area.toPlainText()
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                self.status_bar.showMessage(f"文件已导出：{file_path}", 3000)
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"导出时出错：\n{str(e)}")
+    
+    def check_save(self):
+        """Verificar se precisa salvar antes de fechar/abrir novo"""
+        if self.is_modified:
+            reply = QMessageBox.question(
+                self, "保存？",
+                "文件已被修改。是否保存更改？",
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+            )
+            
+            if reply == QMessageBox.Save:
+                self.save_file()
+                return True
+            elif reply == QMessageBox.Cancel:
+                return False
+        
+        return True
+    
+    def save_file(self):
+        """Salvar arquivo (formato normal ou criptografado dependendo do estado)"""
+        if self.current_file:
+            if self.is_encrypted:
+                # Se o arquivo atual é criptografado, salvar como criptografado
+                self.save_encrypted_file()
+            else:
+                self.save_to_file(self.current_file)
+        else:
+            # Perguntar se quer salvar criptografado ou não
+            reply = QMessageBox.question(
+                self, "保存类型",
+                "是否使用加密保存？",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            
+            if reply == QMessageBox.Cancel:
+                return
+            elif reply == QMessageBox.Yes:
+                self.save_encrypted_file()
+            else:
+                self.save_file_as()
+    
+    def save_file_as(self):
+        """Salvar arquivo como (sem criptografia)"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "另存为", "",
+            "JSON文件 (*.json);;文本文件 (*.txt);;所有文件 (*.*)"
+        )
+        
+        if file_path:
+            self.save_to_file(file_path)
+    
+    def closeEvent(self, event):
+        """Evento de fechar a janela"""
+        if self.check_save():
+            event.accept()
+        else:
+            event.ignore()
+    
+    # ========== FUNÇÕES DE EDIÇÃO ==========
+    
+    def undo(self):
+        self.text_area.undo()
+    
+    def redo(self):
+        self.text_area.redo()
+    
+    def cut(self):
+        self.text_area.cut()
+    
+    def copy(self):
+        self.text_area.copy()
+    
+    def paste(self):
+        self.text_area.paste()
+    
+    def select_all(self):
+        self.text_area.selectAll()
+    
+    # ========== FUNÇÕES DE LOCALIZAÇÃO ==========
+    
+    def show_search(self):
+        """Mostrar barra de localização"""
+        self.search_bar.show()
+        self.search_input.setFocus()
+        self.replace_input.hide()
+        self.btn_replace.hide()
+        self.btn_replace_all.hide()
+    
+    def show_replace(self):
+        """Mostrar barra de substituição"""
+        self.search_bar.show()
+        self.search_input.setFocus()
+        self.replace_input.show()
+        self.btn_replace.show()
+        self.btn_replace_all.show()
+    
+    def hide_search(self):
+        """Ocultar barra de localização"""
+        self.search_bar.hide()
+        self.search_input.clear()
+        self.replace_input.clear()
+        self.text_area.setExtraSelections([])
+    
+    def on_search_text_changed(self, text):
+        """Quando o texto de busca muda"""
+        self.search_text = text
+        self.highlight_all()
+    
+    def highlight_all(self):
+        """Destacar todas as ocorrências"""
+        extra_selections = []
+        
+        if self.search_text:
+            highlight_format = QTextCharFormat()
+            highlight_format.setBackground(QColor(255, 255, 0, 100))
+            
+            document = self.text_area.document()
+            cursor = QTextCursor(document)
+            
+            while True:
+                cursor = document.find(self.search_text, cursor)
+                if cursor.isNull():
+                    break
+                
+                selection = QTextEdit.ExtraSelection()
+                selection.cursor = cursor
+                selection.format = highlight_format
+                extra_selections.append(selection)
+        
+        self.text_area.setExtraSelections(extra_selections)
+    
+    def find_next(self):
+        """Encontrar próxima ocorrência"""
+        if not self.search_text:
+            return
+        
+        cursor = self.text_area.textCursor()
+        
+        if cursor.hasSelection() and cursor.selectedText() == self.search_text:
+            cursor.movePosition(QTextCursor.NextCharacter)
+            self.text_area.setTextCursor(cursor)
+        
+        found = self.text_area.find(self.search_text)
+        
+        if not found:
+            cursor.movePosition(QTextCursor.Start)
+            self.text_area.setTextCursor(cursor)
+            found = self.text_area.find(self.search_text)
+            
+            if found:
+                self.status_bar.showMessage("已到达文档开头", 3000)
+            else:
+                self.status_bar.showMessage(f"未找到文本 '{self.search_text}'", 3000)
+                return False
+        
+        return True
+    
+    def find_previous(self):
+        """Encontrar ocorrência anterior"""
+        if not self.search_text:
+            return
+        
+        found = self.text_area.find(self.search_text, QTextDocument.FindBackward)
+        
+        if not found:
+            cursor = self.text_area.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            self.text_area.setTextCursor(cursor)
+            found = self.text_area.find(self.search_text, QTextDocument.FindBackward)
+            
+            if found:
+                self.status_bar.showMessage("已到达文档末尾", 3000)
+            else:
+                self.status_bar.showMessage(f"未找到文本 '{self.search_text}'", 3000)
+                return False
+        
+        return True
+    
+    def replace_current(self):
+        """Substituir ocorrência atual"""
+        if not self.search_text:
+            return
+        
+        cursor = self.text_area.textCursor()
+        
+        if cursor.hasSelection() and cursor.selectedText() == self.search_text:
+            cursor.insertText(self.replace_input.text())
+            self.is_modified = True
+            self.update_window_title()
+            self.find_next()
+        else:
+            if self.find_next():
+                self.replace_current()
+    
+    def replace_all(self):
+        """Substituir todas as ocorrências"""
+        if not self.search_text:
+            return
+        
+        original_cursor = self.text_area.textCursor()
+        cursor = self.text_area.textCursor()
+        cursor.beginEditBlock()
+        
+        cursor.movePosition(QTextCursor.Start)
+        self.text_area.setTextCursor(cursor)
+        
+        count = 0
+        replace_text = self.replace_input.text()
+        
+        while self.text_area.find(self.search_text):
+            cursor = self.text_area.textCursor()
+            cursor.insertText(replace_text)
+            count += 1
+        
+        cursor.endEditBlock()
+        self.text_area.setTextCursor(original_cursor)
+        
+        if count > 0:
+            self.is_modified = True
+            self.update_window_title()
+            QMessageBox.information(self, "替换", f"已替换 {count} 处匹配项。")
+        else:
+            QMessageBox.information(self, "替换", f"未找到文本 '{self.search_text}'。")
+    
+    # ========== FUNÇÕES DE EXIBIÇÃO ==========
+    
+    def toggle_word_wrap(self, checked):
+        """Alternar quebra de linha"""
+        if checked:
+            self.text_area.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+        else:
+            self.text_area.setLineWrapMode(QPlainTextEdit.NoWrap)
+    
+    def toggle_toolbar(self, checked):
+        """Alternar barra de ferramentas"""
+        if checked:
+            self.toolbar.show()
+        else:
+            self.toolbar.hide()
+    
+    def toggle_statusbar(self, checked):
+        """Alternar barra de status"""
+        if checked:
+            self.status_bar.show()
+        else:
+            self.status_bar.hide()
+    
+    def zoom_in(self):
+        """Aumentar zoom"""
+        font = self.text_area.font()
+        font.setPointSize(font.pointSize() + 1)
+        self.text_area.setFont(font)
+    
+    def zoom_out(self):
+        """Diminuir zoom"""
+        font = self.text_area.font()
+        size = font.pointSize()
+        if size > 8:
+            font.setPointSize(size - 1)
+            self.text_area.setFont(font)
+    
+    def zoom_reset(self):
+        """Resetar zoom"""
+        font = QFont("Consolas", 11)
+        self.text_area.setFont(font)
+    
+    # ========== FUNÇÕES DE AJUDA ==========
+    
+    def show_about(self):
+        """Mostrar diálogo sobre"""
+        crypto_status = "✅ 可用" if CRYPTO_AVAILABLE else "❌ 不可用（请安装 cryptography）"
+        
+        about_text = f"""
+        <h2>简易编辑器</h2>
+        <p><b>版本：</b> 2.0.0</p>
+        <p>一个支持加密的 JSON 格式文本编辑器。</p>
+        
+        <h3>🔒 加密：</h3>
+        <p><b>状态：</b> {crypto_status}</p>
+        <p><b>算法：</b> AES-256 (Fernet)</p>
+        <p><b>密钥派生：</b> PBKDF2-HMAC-SHA256</p>
+        
+        <h3>功能：</h3>
+        <ul>
+            <li>以 JSON 格式保存文件并附带元数据</li>
+            <li>密码加密（AES-256）</li>
+            <li>打开加密和未加密文件</li>
+            <li>查找和替换文本</li>
+            <li>字符、单词和行数统计</li>
+            <li>可调节缩放</li>
+            <li>自动换行</li>
+        </ul>
+        
+        <h3>快捷键：</h3>
+        <ul>
+            <li>Ctrl+N：新建文件</li>
+            <li>Ctrl+O：打开</li>
+            <li>Ctrl+S：保存</li>
+            <li>Ctrl+E：加密保存</li>
+            <li>Ctrl+F：查找</li>
+            <li>Ctrl+H：替换</li>
+            <li>Ctrl+Z：撤销</li>
+            <li>Ctrl+Y：重做</li>
+            <li>Ctrl++：放大</li>
+            <li>Ctrl+-：缩小</li>
+        </ul>
+        
+        <p><i>使用 DeepSeek 协助开发</i></p>
+        <p><i>Όχι, ο Χρόνος δεν είναι ο άρχοντας της γνώσης</i></p>
+        """
+        
+        QMessageBox.about(self, "关于简易编辑器", about_text)
+
+
+class StartupDialog(QDialog):
+    """Diálogo inicial com opções"""
+    
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("简易编辑器")
+        self.setModal(True)
+        self.setGeometry(400, 300, 500, 300)
+        
+        layout = QVBoxLayout()
+        
+        # Título
+        title = QLabel("📝 简易编辑器\n带加密功能 🔒")
+        title.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+            padding: 20px;
+            background-color: #ecf0f1;
+            border-radius: 10px;
+        """)
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+        
+        # Opções
+        options = QWidget()
+        options_layout = QVBoxLayout(options)
+        
+        btn_new = QPushButton("📄 新建文件")
+        btn_new.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                padding: 15px;
+                background-color: #2ecc71;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                margin: 5px;
+            }
+            QPushButton:hover {
+                background-color: #27ae60;
+            }
+        """)
+        btn_new.clicked.connect(self.accept)
+        options_layout.addWidget(btn_new)
+        
+        btn_open = QPushButton("📂 打开文件")
+        btn_open.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                padding: 15px;
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                margin: 5px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        btn_open.clicked.connect(self.open_file)
+        options_layout.addWidget(btn_open)
+        
+        if not CRYPTO_AVAILABLE:
+            warning = QLabel("⚠️ 加密功能不可用。\n请安装：pip install cryptography")
+            warning.setStyleSheet("color: orange; padding: 10px;")
+            warning.setAlignment(Qt.AlignCenter)
+            options_layout.addWidget(warning)
+        
+        layout.addWidget(options)
+        
+        # Botão sair
+        btn_exit = QPushButton("❌ 退出")
+        btn_exit.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                padding: 10px;
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                margin: 5px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        btn_exit.clicked.connect(self.reject)
+        layout.addWidget(btn_exit)
+        
+        self.setLayout(layout)
+        self.open_file_requested = False
+    
+    def open_file(self):
+        """Abrir arquivo diretamente"""
+        self.open_file_requested = True
+        self.accept()
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("简易编辑器")
+    
+    if not CRYPTO_AVAILABLE:
+        QMessageBox.warning(None, "警告", 
+                          "未安装 'cryptography' 库。\n"
+                          "加密功能将不可用。\n\n"
+                          "请使用以下命令安装：pip install cryptography")
+    
+    # Diálogo inicial
+    dialog = StartupDialog()
+    if dialog.exec_() == QDialog.Accepted:
+        editor = SimpleTextEditor()
+        if dialog.open_file_requested:
+            editor.open_file()
+        editor.show()
+        sys.exit(app.exec_())
+    else:
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
