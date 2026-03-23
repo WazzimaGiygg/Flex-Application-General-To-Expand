@@ -6,6 +6,7 @@ from datetime import datetime
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
+from PyQt5.QtWebEngineWidgets import QWebEngineView  # Para renderizar HTML
 
 # Importar bibliotecas de criptografia
 try:
@@ -17,18 +18,35 @@ except ImportError:
     CRYPTO_AVAILABLE = False
     print("Aviso: Biblioteca 'cryptography' não instalada. Funcionalidade de criptografia desabilitada.")
 
+class HTMLPlugin:
+    """Classe para gerenciar plugins HTML"""
+    
+    def __init__(self, name, html_code, description=""):
+        self.name = name
+        self.html_code = html_code
+        self.description = description
+        self.is_active = False
+        self.widget = None
+    
+    def create_widget(self):
+        """Cria o widget do plugin"""
+        self.widget = QWebEngineView()
+        self.widget.setHtml(self.html_code)
+        return self.widget
+
 class SimpleTextEditor(QMainWindow):
     """
     Editor de texto simples que salva arquivos em formato JSON com suporte a criptografia
-    Versão com criptografia por senha
+    Versão com criptografia por senha e suporte a plugins HTML
     """
     
     def __init__(self):
         super().__init__()
         
         # Configurações da janela
-        self.setWindowTitle("Editor Simples - Bloco de Notas JSON com Criptografia")
-        self.setGeometry(100, 100, 900, 600)
+        self.setWindowTitle("FlexNotepad - Bloco de Notas JSON com Criptografia e Plugins")
+        self.setGeometry(100, 100, 1200, 700)
+        self.setWindowIcon(QIcon("icone.ico"))
         
         # Variáveis de estado
         self.current_file = None
@@ -36,6 +54,11 @@ class SimpleTextEditor(QMainWindow):
         self.search_text = ""
         self.replace_text = ""
         self.is_encrypted = False  # Indica se o arquivo atual está criptografado
+        
+        # Variáveis para plugins
+        self.plugins = {}  # Dicionário de plugins carregados
+        self.active_plugins = []  # Lista de plugins ativos
+        self.plugin_dock = None  # Dock widget para os plugins
         
         # Configurar interface
         self.init_ui()
@@ -67,6 +90,30 @@ class SimpleTextEditor(QMainWindow):
         open_action.setStatusTip("Abrir arquivo existente")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
+        
+        # Menu Importar com opção de plugins
+        import_menu = file_menu.addMenu("&Importar")
+        
+        import_json_action = QAction("Importar &JSON...", self)
+        import_json_action.setStatusTip("Importar arquivo JSON")
+        import_json_action.triggered.connect(self.import_json)
+        import_menu.addAction(import_json_action)
+        
+        import_txt_action = QAction("Importar &TXT...", self)
+        import_txt_action.setStatusTip("Importar arquivo de texto")
+        import_txt_action.triggered.connect(self.import_txt)
+        import_menu.addAction(import_txt_action)
+        
+        import_menu.addSeparator()
+        
+        # NOVA OPÇÃO: Adicionar Plugin HTML
+        add_plugin_action = QAction("➕ &Adicionar Plugin HTML...", self)
+        add_plugin_action.setShortcut("Ctrl+P")
+        add_plugin_action.setStatusTip("Adicionar um plugin HTML para auxiliar no editor")
+        add_plugin_action.triggered.connect(self.add_html_plugin)
+        import_menu.addAction(add_plugin_action)
+        
+        file_menu.addSeparator()
         
         save_action = QAction("&Salvar", self)
         save_action.setShortcut("Ctrl+S")
@@ -107,16 +154,34 @@ class SimpleTextEditor(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
+        # Menu Plugins
+        plugins_menu = menubar.addMenu("&Plugins")
+        
+        manage_plugins_action = QAction("&Gerenciar Plugins", self)
+        manage_plugins_action.setStatusTip("Gerenciar plugins carregados")
+        manage_plugins_action.triggered.connect(self.manage_plugins)
+        plugins_menu.addAction(manage_plugins_action)
+        
+        plugins_menu.addSeparator()
+        
+        self.show_plugins_action = QAction("&Mostrar Painel de Plugins", self)
+        self.show_plugins_action.setCheckable(True)
+        self.show_plugins_action.setStatusTip("Mostrar/ocultar painel de plugins")
+        self.show_plugins_action.triggered.connect(self.toggle_plugin_panel)
+        plugins_menu.addAction(self.show_plugins_action)
+        
         # Menu Editar
         edit_menu = menubar.addMenu("&Editar")
         
         undo_action = QAction("&Desfazer", self)
         undo_action.setShortcut("Ctrl+Z")
+        undo_action.setStatusTip("Desfazer")
         undo_action.triggered.connect(self.undo)
         edit_menu.addAction(undo_action)
         
         redo_action = QAction("&Refazer", self)
         redo_action.setShortcut("Ctrl+Y")
+        redo_action.setStatusTip("Refazer")
         redo_action.triggered.connect(self.redo)
         edit_menu.addAction(redo_action)
         
@@ -124,16 +189,19 @@ class SimpleTextEditor(QMainWindow):
         
         cut_action = QAction("&Recortar", self)
         cut_action.setShortcut("Ctrl+X")
+        cut_action.setStatusTip("Recortar")
         cut_action.triggered.connect(self.cut)
         edit_menu.addAction(cut_action)
         
         copy_action = QAction("&Copiar", self)
         copy_action.setShortcut("Ctrl+C")
+        copy_action.setStatusTip("Copiar")
         copy_action.triggered.connect(self.copy)
         edit_menu.addAction(copy_action)
         
         paste_action = QAction("&Colar", self)
         paste_action.setShortcut("Ctrl+V")
+        paste_action.setStatusTip("Colar")
         paste_action.triggered.connect(self.paste)
         edit_menu.addAction(paste_action)
         
@@ -141,6 +209,7 @@ class SimpleTextEditor(QMainWindow):
         
         select_all_action = QAction("Selecionar &Tudo", self)
         select_all_action.setShortcut("Ctrl+A")
+        select_all_action.setStatusTip("Selecionar tudo")
         select_all_action.triggered.connect(self.select_all)
         edit_menu.addAction(select_all_action)
         
@@ -149,16 +218,19 @@ class SimpleTextEditor(QMainWindow):
         
         find_action = QAction("&Localizar...", self)
         find_action.setShortcut("Ctrl+F")
+        find_action.setStatusTip("Localizar texto")
         find_action.triggered.connect(self.show_search)
         search_menu.addAction(find_action)
         
         find_next_action = QAction("Localizar &Próximo", self)
         find_next_action.setShortcut("F3")
+        find_next_action.setStatusTip("Localizar próximo")
         find_next_action.triggered.connect(self.find_next)
         search_menu.addAction(find_next_action)
         
         replace_action = QAction("&Substituir...", self)
         replace_action.setShortcut("Ctrl+H")
+        replace_action.setStatusTip("Substituir texto")
         replace_action.triggered.connect(self.show_replace)
         search_menu.addAction(replace_action)
         
@@ -168,18 +240,21 @@ class SimpleTextEditor(QMainWindow):
         word_wrap_action = QAction("&Quebra de Linha", self)
         word_wrap_action.setCheckable(True)
         word_wrap_action.setChecked(True)
+        word_wrap_action.setStatusTip("Ativar/desativar quebra de linha")
         word_wrap_action.triggered.connect(self.toggle_word_wrap)
         view_menu.addAction(word_wrap_action)
         
         toolbar_action = QAction("&Barra de Ferramentas", self)
         toolbar_action.setCheckable(True)
         toolbar_action.setChecked(True)
+        toolbar_action.setStatusTip("Mostrar/ocultar barra de ferramentas")
         toolbar_action.triggered.connect(self.toggle_toolbar)
         view_menu.addAction(toolbar_action)
         
         statusbar_action = QAction("&Barra de Status", self)
         statusbar_action.setCheckable(True)
         statusbar_action.setChecked(True)
+        statusbar_action.setStatusTip("Mostrar/ocultar barra de status")
         statusbar_action.triggered.connect(self.toggle_statusbar)
         view_menu.addAction(statusbar_action)
         
@@ -187,16 +262,19 @@ class SimpleTextEditor(QMainWindow):
         
         zoom_in_action = QAction("Aumentar &Zoom", self)
         zoom_in_action.setShortcut("Ctrl++")
+        zoom_in_action.setStatusTip("Aumentar zoom")
         zoom_in_action.triggered.connect(self.zoom_in)
         view_menu.addAction(zoom_in_action)
         
         zoom_out_action = QAction("Diminuir &Zoom", self)
         zoom_out_action.setShortcut("Ctrl+-")
+        zoom_out_action.setStatusTip("Diminuir zoom")
         zoom_out_action.triggered.connect(self.zoom_out)
         view_menu.addAction(zoom_out_action)
         
         zoom_reset_action = QAction("&Resetar Zoom", self)
         zoom_reset_action.setShortcut("Ctrl+0")
+        zoom_reset_action.setStatusTip("Resetar zoom")
         zoom_reset_action.triggered.connect(self.zoom_reset)
         view_menu.addAction(zoom_reset_action)
         
@@ -204,6 +282,7 @@ class SimpleTextEditor(QMainWindow):
         help_menu = menubar.addMenu("A&juda")
         
         about_action = QAction("&Sobre", self)
+        about_action.setStatusTip("Sobre o programa")
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
         
@@ -264,18 +343,36 @@ class SimpleTextEditor(QMainWindow):
         btn_find.triggered.connect(self.show_search)
         self.toolbar.addAction(btn_find)
         
-        # ========== ÁREA CENTRAL ==========
+        self.toolbar.addSeparator()
+        
+        # CORREÇÃO: Botão para adicionar plugin - criando QAction corretamente
+        btn_plugin = QAction(self)
+        btn_plugin.setText("🔌 Adicionar Plugin")
+        btn_plugin.setStatusTip("Adicionar plugin HTML")
+        btn_plugin.triggered.connect(self.add_html_plugin)
+        self.toolbar.addAction(btn_plugin)
+        
+        # ========== ÁREA CENTRAL COM SPLITTER ==========
         central = QWidget()
         self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
+        main_layout = QHBoxLayout(central)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Criar splitter para dividir editor e plugins
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(self.main_splitter)
+        
+        # Widget do editor
+        editor_widget = QWidget()
+        editor_layout = QVBoxLayout(editor_widget)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
         
         # Área de texto
         self.text_area = QPlainTextEdit()
         self.text_area.setFont(QFont("Consolas", 11))
         self.text_area.textChanged.connect(self.on_text_changed)
         self.text_area.cursorPositionChanged.connect(self.on_cursor_position_changed)
-        layout.addWidget(self.text_area)
+        editor_layout.addWidget(self.text_area)
         
         # Barra de localização (inicialmente oculta)
         self.search_bar = QWidget()
@@ -328,8 +425,22 @@ class SimpleTextEditor(QMainWindow):
         search_layout.addStretch()
         search_layout.addWidget(btn_close_search)
         
-        layout.addWidget(self.search_bar)
+        editor_layout.addWidget(self.search_bar)
         self.search_bar.hide()
+        
+        self.main_splitter.addWidget(editor_widget)
+        
+        # ========== DOCK DE PLUGINS ==========
+        self.plugin_dock = QDockWidget("Plugins", self)
+        self.plugin_dock.setAllowedAreas(Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea)
+        
+        self.plugin_tab_widget = QTabWidget()
+        self.plugin_tab_widget.setTabsClosable(True)
+        self.plugin_tab_widget.tabCloseRequested.connect(self.close_plugin_tab)
+        
+        self.plugin_dock.setWidget(self.plugin_tab_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.plugin_dock)
+        self.plugin_dock.hide()
         
         # ========== BARRA DE STATUS ==========
         self.status_bar = self.statusBar()
@@ -350,6 +461,10 @@ class SimpleTextEditor(QMainWindow):
         self.encrypt_label = QLabel("🔓")
         self.encrypt_label.setToolTip("Arquivo não criptografado")
         self.status_bar.addPermanentWidget(self.encrypt_label)
+        
+        # Label de plugins ativos
+        self.plugins_label = QLabel("🔌 0 plugins")
+        self.status_bar.addPermanentWidget(self.plugins_label)
     
     def apply_style(self):
         """Aplicar estilo visual"""
@@ -434,25 +549,48 @@ class SimpleTextEditor(QMainWindow):
         QPushButton:pressed {
             background-color: #1c6ea4;
         }
+        QDockWidget::title {
+            background-color: #ecf0f1;
+            padding: 5px;
+            text-align: left;
+        }
+        QTabWidget::pane {
+            border: 1px solid #bdc3c7;
+        }
+        QTabBar::tab {
+            background-color: #ecf0f1;
+            padding: 5px 10px;
+            margin-right: 2px;
+        }
+        QTabBar::tab:selected {
+            background-color: white;
+        }
         """
         self.setStyleSheet(style)
     
     def show_welcome(self):
         """Mostrar mensagem de boas-vindas"""
-        welcome_text = """# Editor Simples - Bloco de Notas JSON com Criptografia
+        welcome_text = """# FlexNotepad - Bloco de Notas JSON com Criptografia e Plugins
 
 ## 📝 Bem-vindo!
 
-Este é um editor de texto que salva arquivos em formato JSON com suporte a criptografia.
+Este é um editor de texto que salva arquivos em formato JSON com suporte a criptografia e plugins HTML.
 
 ### ✨ Funcionalidades:
 - ✅ Salvar arquivos em formato JSON
 - ✅ Criptografia por senha (AES-256)
 - ✅ Abrir arquivos criptografados e não criptografados
+- ✅ **🔌 Suporte a plugins HTML** (adicione ferramentas auxiliares)
 - ✅ Localizar e substituir texto
 - ✅ Desfazer/Refazer
 - ✅ Quebra de linha
 - ✅ Zoom ajustável
+
+### 🔌 Como usar plugins HTML:
+- Use **Ctrl+P** ou menu Arquivo > Importar > "Adicionar Plugin HTML..."
+- Cole o código HTML de uma ferramenta auxiliar
+- O plugin aparecerá no painel lateral
+- Você pode adicionar vários plugins e alternar entre eles
 
 ### 🔒 Como usar a criptografia:
 - Use **Ctrl+E** ou menu Arquivo > "Salvar Criptografado..."
@@ -465,6 +603,7 @@ Este é um editor de texto que salva arquivos em formato JSON com suporte a crip
 - Use **Ctrl+O** para abrir
 - Use **Ctrl+S** para salvar (sem criptografia)
 - Use **Ctrl+E** para salvar com criptografia
+- Use **Ctrl+P** para adicionar plugin
 - Use **Ctrl+F** para localizar
 - Use **Ctrl+H** para substituir
 
@@ -483,47 +622,472 @@ Divirta-se! 🎉
         self.update_window_title()
         self.update_encrypt_label()
     
-    def on_text_changed(self):
-        """Quando o texto muda"""
-        self.is_modified = True
-        self.update_window_title()
-        self.update_size_label()
+    # ========== FUNÇÕES DE PLUGIN ==========
     
-    def on_cursor_position_changed(self):
-        """Quando o cursor muda de posição"""
-        cursor = self.text_area.textCursor()
-        line = cursor.blockNumber() + 1
-        col = cursor.columnNumber() + 1
-        self.position_label.setText(f"Lin {line}, Col {col}")
-    
-    def update_window_title(self):
-        """Atualizar título da janela"""
-        title = "Editor Simples"
-        if self.current_file:
-            title += f" - {os.path.basename(self.current_file)}"
-        if self.is_encrypted:
-            title += " [Criptografado]"
-        if self.is_modified:
-            title += " *"
-        self.setWindowTitle(title)
-    
-    def update_size_label(self):
-        """Atualizar label de tamanho"""
-        text = self.text_area.toPlainText()
-        chars = len(text)
-        words = len(text.split())
-        lines = text.count('\n') + 1
+    def add_html_plugin(self):
+        """Adicionar um novo plugin HTML"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Adicionar Plugin HTML")
+        dialog.setModal(True)
+        dialog.resize(600, 500)
         
-        self.size_label.setText(f"{chars} caracteres | {words} palavras | {lines} linhas")
+        layout = QVBoxLayout()
+        
+        # Nome do plugin
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Nome do Plugin:"))
+        name_input = QLineEdit()
+        name_input.setPlaceholderText("Ex: Calculadora, Tradutor, etc...")
+        name_layout.addWidget(name_input)
+        layout.addLayout(name_layout)
+        
+        # Descrição
+        desc_layout = QHBoxLayout()
+        desc_layout.addWidget(QLabel("Descrição:"))
+        desc_input = QLineEdit()
+        desc_input.setPlaceholderText("Descrição opcional do plugin")
+        desc_layout.addWidget(desc_input)
+        layout.addLayout(desc_layout)
+        
+        # Área para código HTML
+        layout.addWidget(QLabel("Código HTML:"))
+        html_edit = QPlainTextEdit()
+        html_edit.setPlaceholderText("""
+Exemplo de plugin HTML:
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h3>Minha Ferramenta</h3>
+    <button onclick="alert('Olá!')">Clique aqui</button>
+</body>
+</html>
+        """.strip())
+        layout.addWidget(html_edit)
+        
+        # Exemplo de plugin
+        btn_example = QPushButton("Carregar Exemplo (Calculadora)")
+        btn_example.clicked.connect(lambda: self.load_example_plugin(html_edit))
+        layout.addWidget(btn_example)
+        
+        # Botões
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        dialog.setLayout(layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            name = name_input.text().strip()
+            html_code = html_edit.toPlainText().strip()
+            description = desc_input.text().strip()
+            
+            if not name:
+                QMessageBox.warning(self, "Erro", "Por favor, informe um nome para o plugin.")
+                return
+            
+            if not html_code:
+                QMessageBox.warning(self, "Erro", "Por favor, insira o código HTML do plugin.")
+                return
+            
+            # Criar e adicionar plugin
+            plugin = HTMLPlugin(name, html_code, description)
+            self.plugins[name] = plugin
+            self.add_plugin_to_interface(plugin)
+            
+            self.update_plugins_label()
+            self.status_bar.showMessage(f"Plugin '{name}' adicionado com sucesso!", 3000)
     
-    def update_encrypt_label(self):
-        """Atualizar label de criptografia na barra de status"""
-        if self.is_encrypted:
-            self.encrypt_label.setText("🔒")
-            self.encrypt_label.setToolTip("Arquivo criptografado")
+    def load_example_plugin(self, html_edit):
+        """Carregar um exemplo de plugin (calculadora)"""
+        example_html = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .calculator {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 20px;
+            width: 100%;
+            max-width: 320px;
+        }
+        
+        .display {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: right;
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+            min-height: 80px;
+            word-wrap: break-word;
+        }
+        
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        
+        button {
+            padding: 20px;
+            font-size: 1.2em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .number {
+            background: #e9ecef;
+            color: #495057;
+        }
+        
+        .number:hover {
+            background: #dee2e6;
+        }
+        
+        .operator {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .operator:hover {
+            background: #ff5252;
+        }
+        
+        .equal {
+            background: #51cf66;
+            color: white;
+            grid-column: span 2;
+        }
+        
+        .equal:hover {
+            background: #40c057;
+        }
+        
+        .clear {
+            background: #ff8787;
+            color: white;
+        }
+        
+        .clear:hover {
+            background: #ff6b6b;
+        }
+        
+        .title {
+            text-align: center;
+            margin-bottom: 15px;
+            color: white;
+            font-size: 0.9em;
+        }
+        
+        @media (max-width: 400px) {
+            button {
+                padding: 15px;
+                font-size: 1em;
+            }
+            .display {
+                font-size: 1.5em;
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div style="width: 100%;">
+        <div class="title">🧮 Calculadora FlexNotepad</div>
+        <div class="calculator">
+            <div class="display" id="display">0</div>
+            <div class="buttons">
+                <button class="clear" onclick="clearDisplay()">C</button>
+                <button class="operator" onclick="appendOperator('/')">÷</button>
+                <button class="operator" onclick="appendOperator('*')">×</button>
+                <button class="operator" onclick="appendOperator('-')">-</button>
+                
+                <button class="number" onclick="appendNumber('7')">7</button>
+                <button class="number" onclick="appendNumber('8')">8</button>
+                <button class="number" onclick="appendNumber('9')">9</button>
+                <button class="operator" onclick="appendOperator('+')">+</button>
+                
+                <button class="number" onclick="appendNumber('4')">4</button>
+                <button class="number" onclick="appendNumber('5')">5</button>
+                <button class="number" onclick="appendNumber('6')">6</button>
+                <button class="equal" onclick="calculate()">=</button>
+                
+                <button class="number" onclick="appendNumber('1')">1</button>
+                <button class="number" onclick="appendNumber('2')">2</button>
+                <button class="number" onclick="appendNumber('3')">3</button>
+                
+                <button class="number" onclick="appendNumber('0')">0</button>
+                <button class="number" onclick="appendNumber('.')">.</button>
+                <button class="operator" onclick="backspace()">⌫</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let display = document.getElementById('display');
+        let currentInput = '';
+        
+        function updateDisplay() {
+            display.textContent = currentInput || '0';
+        }
+        
+        function appendNumber(num) {
+            currentInput += num;
+            updateDisplay();
+        }
+        
+        function appendOperator(op) {
+            if (currentInput && !isNaN(currentInput[currentInput.length - 1])) {
+                currentInput += op;
+                updateDisplay();
+            }
+        }
+        
+        function calculate() {
+            try {
+                let expression = currentInput.replace(/×/g, '*').replace(/÷/g, '/');
+                let result = eval(expression);
+                currentInput = result.toString();
+                updateDisplay();
+            } catch(e) {
+                currentInput = 'Erro';
+                updateDisplay();
+                setTimeout(() => {
+                    currentInput = '';
+                    updateDisplay();
+                }, 1000);
+            }
+        }
+        
+        function clearDisplay() {
+            currentInput = '';
+            updateDisplay();
+        }
+        
+        function backspace() {
+            currentInput = currentInput.slice(0, -1);
+            updateDisplay();
+        }
+    </script>
+</body>
+</html>"""
+        html_edit.setPlainText(example_html)
+    
+    def add_plugin_to_interface(self, plugin):
+        """Adicionar plugin à interface"""
+        # Criar widget do plugin
+        widget = plugin.create_widget()
+        
+        # Adicionar à tab widget
+        index = self.plugin_tab_widget.addTab(widget, plugin.name)
+        self.plugin_tab_widget.setTabToolTip(index, plugin.description or plugin.name)
+        
+        # Mostrar dock se estiver oculto
+        if not self.plugin_dock.isVisible():
+            self.plugin_dock.show()
+            self.show_plugins_action.setChecked(True)
+        
+        plugin.is_active = True
+        self.active_plugins.append(plugin)
+    
+    def close_plugin_tab(self, index):
+        """Fechar uma aba de plugin"""
+        tab_text = self.plugin_tab_widget.tabText(index)
+        
+        reply = QMessageBox.question(
+            self, "Remover Plugin",
+            f"Deseja remover o plugin '{tab_text}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            # Remover da lista de plugins
+            if tab_text in self.plugins:
+                plugin = self.plugins[tab_text]
+                if plugin in self.active_plugins:
+                    self.active_plugins.remove(plugin)
+                del self.plugins[tab_text]
+            
+            # Remover a tab
+            self.plugin_tab_widget.removeTab(index)
+            
+            # Se não houver mais plugins, ocultar o dock
+            if self.plugin_tab_widget.count() == 0:
+                self.plugin_dock.hide()
+                self.show_plugins_action.setChecked(False)
+            
+            self.update_plugins_label()
+            self.status_bar.showMessage(f"Plugin '{tab_text}' removido", 3000)
+    
+    def manage_plugins(self):
+        """Gerenciar plugins carregados"""
+        if not self.plugins:
+            QMessageBox.information(self, "Gerenciar Plugins", 
+                                   "Nenhum plugin carregado.\nUse Arquivo > Importar > Adicionar Plugin HTML para adicionar plugins.")
+            return
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Gerenciar Plugins")
+        dialog.setModal(True)
+        dialog.resize(500, 300)
+        
+        layout = QVBoxLayout()
+        
+        # Lista de plugins
+        layout.addWidget(QLabel("Plugins carregados:"))
+        
+        list_widget = QListWidget()
+        for name, plugin in self.plugins.items():
+            item = QListWidgetItem(f"🔌 {name}")
+            if plugin.description:
+                item.setToolTip(plugin.description)
+            list_widget.addItem(item)
+        
+        layout.addWidget(list_widget)
+        
+        # Botões de ação
+        button_layout = QHBoxLayout()
+        
+        btn_remove = QPushButton("Remover Selecionado")
+        btn_remove.clicked.connect(lambda: self.remove_plugin_from_manager(list_widget, dialog))
+        button_layout.addWidget(btn_remove)
+        
+        button_layout.addStretch()
+        
+        btn_close = QPushButton("Fechar")
+        btn_close.clicked.connect(dialog.accept)
+        button_layout.addWidget(btn_close)
+        
+        layout.addLayout(button_layout)
+        
+        dialog.setLayout(layout)
+        dialog.exec_()
+    
+    def remove_plugin_from_manager(self, list_widget, dialog):
+        """Remover plugin da interface de gerenciamento"""
+        current_item = list_widget.currentItem()
+        if current_item:
+            name = current_item.text().replace("🔌 ", "")
+            
+            reply = QMessageBox.question(
+                self, "Remover Plugin",
+                f"Deseja remover o plugin '{name}'?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                # Encontrar e fechar a tab correspondente
+                for i in range(self.plugin_tab_widget.count()):
+                    if self.plugin_tab_widget.tabText(i) == name:
+                        self.close_plugin_tab(i)
+                        break
+                
+                # Atualizar lista
+                list_widget.takeItem(list_widget.row(current_item))
+                
+                if list_widget.count() == 0:
+                    dialog.accept()
+    
+    def toggle_plugin_panel(self, checked):
+        """Alternar visibilidade do painel de plugins"""
+        if checked:
+            if self.plugin_tab_widget.count() > 0:
+                self.plugin_dock.show()
+            else:
+                QMessageBox.information(self, "Plugins", 
+                                       "Nenhum plugin carregado.\nUse Arquivo > Importar > Adicionar Plugin HTML para adicionar plugins.")
+                self.show_plugins_action.setChecked(False)
         else:
-            self.encrypt_label.setText("🔓")
-            self.encrypt_label.setToolTip("Arquivo não criptografado")
+            self.plugin_dock.hide()
+    
+    def update_plugins_label(self):
+        """Atualizar label de plugins na barra de status"""
+        count = len(self.plugins)
+        if count == 0:
+            self.plugins_label.setText("🔌 0 plugins")
+        else:
+            self.plugins_label.setText(f"🔌 {count} plugin{'s' if count > 1 else ''}")
+    
+    # ========== FUNÇÕES DE IMPORTAÇÃO ==========
+    
+    def import_json(self):
+        """Importar arquivo JSON para o editor"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Importar JSON", "",
+            "Arquivos JSON (*.json);;Todos os Arquivos (*.*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.text_area.setPlainText(json.dumps(data, indent=2, ensure_ascii=False))
+                self.status_bar.showMessage(f"JSON importado: {file_path}", 3000)
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao importar JSON:\n{str(e)}")
+    
+    def import_txt(self):
+        """Importar arquivo TXT para o editor"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Importar TXT", "",
+            "Arquivos de Texto (*.txt);;Todos os Arquivos (*.*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    self.text_area.setPlainText(content)
+                self.status_bar.showMessage(f"Texto importado: {file_path}", 3000)
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao importar TXT:\n{str(e)}")
     
     # ========== FUNÇÕES DE CRIPTOGRAFIA ==========
     
@@ -893,6 +1457,48 @@ Divirta-se! 🎉
     
     # ========== FUNÇÕES DE EDIÇÃO ==========
     
+    def on_text_changed(self):
+        """Quando o texto muda"""
+        self.is_modified = True
+        self.update_window_title()
+        self.update_size_label()
+    
+    def on_cursor_position_changed(self):
+        """Quando o cursor muda de posição"""
+        cursor = self.text_area.textCursor()
+        line = cursor.blockNumber() + 1
+        col = cursor.columnNumber() + 1
+        self.position_label.setText(f"Lin {line}, Col {col}")
+    
+    def update_window_title(self):
+        """Atualizar título da janela"""
+        title = "FlexNotepad"
+        if self.current_file:
+            title += f" - {os.path.basename(self.current_file)}"
+        if self.is_encrypted:
+            title += " [Criptografado]"
+        if self.is_modified:
+            title += " *"
+        self.setWindowTitle(title)
+    
+    def update_size_label(self):
+        """Atualizar label de tamanho"""
+        text = self.text_area.toPlainText()
+        chars = len(text)
+        words = len(text.split())
+        lines = text.count('\n') + 1
+        
+        self.size_label.setText(f"{chars} caracteres | {words} palavras | {lines} linhas")
+    
+    def update_encrypt_label(self):
+        """Atualizar label de criptografia na barra de status"""
+        if self.is_encrypted:
+            self.encrypt_label.setText("🔒")
+            self.encrypt_label.setToolTip("Arquivo criptografado")
+        else:
+            self.encrypt_label.setText("🔓")
+            self.encrypt_label.setToolTip("Arquivo não criptografado")
+    
     def undo(self):
         self.text_area.undo()
     
@@ -1106,9 +1712,13 @@ Divirta-se! 🎉
         crypto_status = "✅ Disponível" if CRYPTO_AVAILABLE else "❌ Não disponível (instale cryptography)"
         
         about_text = f"""
-        <h2>Editor Simples</h2>
-        <p><b>Versão:</b> 2.0.0</p>
-        <p>Um editor de texto que salva em formato JSON com suporte a criptografia.</p>
+        <h2>Flex Notepad</h2>
+        <p><b>Versão:</b> 3.0.0</p>
+        <p>Um editor de texto que salva em formato JSON com suporte a criptografia e plugins HTML.</p>
+        
+        <h3>🔌 Plugins:</h3>
+        <p>Adicione ferramentas HTML auxiliares para ajudar no editor!</p>
+        <p>Exemplos: calculadoras, conversores, geradores de código, etc.</p>
         
         <h3>🔒 Criptografia:</h3>
         <p><b>Status:</b> {crypto_status}</p>
@@ -1119,6 +1729,7 @@ Divirta-se! 🎉
         <ul>
             <li>Salvar arquivos em JSON com metadados</li>
             <li>Criptografia por senha (AES-256)</li>
+            <li><b>Plugins HTML personalizáveis</b></li>
             <li>Abrir arquivos criptografados e não criptografados</li>
             <li>Localizar e substituir texto</li>
             <li>Contador de caracteres, palavras e linhas</li>
@@ -1132,6 +1743,7 @@ Divirta-se! 🎉
             <li>Ctrl+O: Abrir</li>
             <li>Ctrl+S: Salvar</li>
             <li>Ctrl+E: Salvar Criptografado</li>
+            <li><b>Ctrl+P: Adicionar Plugin HTML</b></li>
             <li>Ctrl+F: Localizar</li>
             <li>Ctrl+H: Substituir</li>
             <li>Ctrl+Z: Desfazer</li>
@@ -1144,7 +1756,7 @@ Divirta-se! 🎉
         <p><i>Όχι, ο Χρόνος δεν είναι ο άρχοντας της γνώσης</i></p>
         """
         
-        QMessageBox.about(self, "Sobre o Editor Simples", about_text)
+        QMessageBox.about(self, "Sobre o FlexNotepad", about_text)
 
 
 class StartupDialog(QDialog):
@@ -1152,14 +1764,14 @@ class StartupDialog(QDialog):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Editor Simples")
+        self.setWindowTitle("FlexNotepad")
         self.setModal(True)
         self.setGeometry(400, 300, 500, 300)
         
         layout = QVBoxLayout()
         
         # Título
-        title = QLabel("📝 EDITOR SIMPLES\ncom Criptografia 🔒")
+        title = QLabel("📝 EDITOR SIMPLES\ncom Criptografia 🔒 e Plugins 🔌")
         title.setStyleSheet("""
             font-size: 24px;
             font-weight: bold;
@@ -1211,6 +1823,24 @@ class StartupDialog(QDialog):
         btn_open.clicked.connect(self.open_file)
         options_layout.addWidget(btn_open)
         
+        btn_plugin = QPushButton("🔌 Adicionar Plugin")
+        btn_plugin.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                padding: 15px;
+                background-color: #9b59b6;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                margin: 5px;
+            }
+            QPushButton:hover {
+                background-color: #8e44ad;
+            }
+        """)
+        btn_plugin.clicked.connect(self.add_plugin)
+        options_layout.addWidget(btn_plugin)
+        
         if not CRYPTO_AVAILABLE:
             warning = QLabel("⚠️ Funcionalidade de criptografia não disponível.\nInstale: pip install cryptography")
             warning.setStyleSheet("color: orange; padding: 10px;")
@@ -1240,16 +1870,22 @@ class StartupDialog(QDialog):
         
         self.setLayout(layout)
         self.open_file_requested = False
+        self.add_plugin_requested = False
     
     def open_file(self):
         """Abrir arquivo diretamente"""
         self.open_file_requested = True
         self.accept()
+    
+    def add_plugin(self):
+        """Adicionar plugin diretamente"""
+        self.add_plugin_requested = True
+        self.accept()
 
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("Editor Simples")
+    app.setApplicationName("FlexNotepad")
     
     if not CRYPTO_AVAILABLE:
         QMessageBox.warning(None, "Aviso", 
@@ -1263,6 +1899,8 @@ def main():
         editor = SimpleTextEditor()
         if dialog.open_file_requested:
             editor.open_file()
+        if dialog.add_plugin_requested:
+            editor.add_html_plugin()
         editor.show()
         sys.exit(app.exec_())
     else:
