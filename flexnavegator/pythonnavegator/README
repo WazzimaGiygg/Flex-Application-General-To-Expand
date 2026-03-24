@@ -1,0 +1,100 @@
+Relatório Técnico: Ecossistema e Funcionalidades do Python Navigator 1.0.1
+
+1. Visão Geral do Sistema e Arquitetura de Software
+
+O Python Navigator 1.0.1 posiciona-se como uma solução de navegação web de alto desempenho, integralmente desenvolvida em ambiente Python. A robustez do sistema assenta na integração estratégica do framework PyQt5 com o motor QtWebEngine. Esta escolha é fundamental para garantir uma interface reativa e compatibilidade total com os padrões modernos da web, uma vez que o QtWebEngine utiliza o núcleo de renderização Chromium. A utilização das bibliotecas PyQt5, QtWebEngineWidgets e QtCore confere ao software uma portabilidade excecional, permitindo uma execução fluida em múltiplas plataformas sem a necessidade de reescrita do código base.
+
+A proposta de valor do software reside no equilíbrio preciso entre a simplicidade necessária para a navegação quotidiana e a inclusão de ferramentas de diagnóstico robustas. Diferente de browsers comerciais de "caixa fechada", o Python Navigator oferece total transparência operacional.
+
+Camada "So What?": A arquitetura baseada em Python, aliada ao armazenamento de configurações e histórico em ficheiros JSON editáveis manualmente, permite um ciclo de desenvolvimento extremamente ágil. Para o utilizador avançado ou administrador de sistemas, isto traduz-se na capacidade de realizar auditorias de dados e personalizações estruturais diretamente no sistema de ficheiros, facilitando a implementação de extensões e fluxos de trabalho altamente customizados.
+
+2. Análise Funcional e Interface de Navegação
+
+A interface do Python Navigator foi desenhada sob uma filosofia de ergonomia e eficiência, focando-se na redução da carga cognitiva através de uma organização lógica de componentes.
+
+* Gestão de Navegação por Abas: O sistema suporta múltiplas abas com gestão dinâmica de títulos, refletindo em tempo real o conteúdo da página carregada. A eficiência do fluxo de trabalho é garantida pela adoção de atalhos de teclado padrão (Ctrl+T para nova aba, Ctrl+W para fechar), minimizando a dependência de periféricos de ponteiro.
+* Barra de Endereço Inteligente: O motor de pesquisa integrado diferencia automaticamente URLs diretos de termos de pesquisa genéricos. Em caso de termos de busca, o sistema encaminha a consulta para o motor predefinido (Google, Bing ou DuckDuckGo).
+* Feedback de Navegação e Zoom: Além dos controlos básicos (Retroceder, Avançar, Recarregar e Home), o navegador introduz um mecanismo de feedback visual na barra de status, exibindo a percentagem exata de zoom sempre que este é ajustado.
+* Interoperabilidade com Ficheiros Locais: O suporte nativo para a abertura de ficheiros .html e .htm (Ctrl+O) permite que o navegador atue como um visualizador técnico para documentação offline e testes de front-end local.
+
+Camada "So What?": A integração harmoniosa entre a web global e o sistema de ficheiros local transforma o navegador numa ferramenta de produtividade superior. Ao permitir a transição imediata entre pesquisa e teste de código local, o Python Navigator reduz o tempo de alternância de contexto (context switching), essencial para utilizadores em ambientes de desenvolvimento.
+
+3. Ferramentas Avançadas de Diagnóstico e Desenvolvimento
+
+O Python Navigator transcende a função de mero visualizador de conteúdo, servindo como uma estação de trabalho de diagnóstico técnico. A transparência do código e a depuração em tempo real são pilares centrais desta versão.
+
+* Visualizador de Código Fonte: Ativado via Ctrl+U, este módulo providencia realce de sintaxe para HTML, CSS e JavaScript. Inclui ferramentas de busca interna com contador de ocorrências e opções de exportação para ficheiros .html ou .txt, permitindo a análise estática de páginas complexas.
+* Consola JavaScript: A consola (Ctrl+Shift+J) captura mensagens do motor WebEngine em tempo real, categorizando-as por severidade (Info, Warning, Error e Deprecation). O filtro de texto integrado permite isolar bugs específicos em aplicações web densas.
+* Identidade Digital (User Agent): Para fins de compatibilidade e testes de servidor, o navegador identifica-se explicitamente através do User Agent: PythonNavigator/1.0.1.
+
+Recursos Centrais para Programadores:
+
+* Consola JavaScript: Depuração de scripts e monitorização de erros de execução.
+* Visualizador de Código: Análise estrutural com realce de sintaxe e exportação.
+* User Agent Customizado: Identificação técnica precisa da versão do motor.
+* Sistema de Skins: Interface adaptável às necessidades visuais do técnico.
+
+Camada "So What?": Estas ferramentas permitem que o profissional identifique falhas de carregamento ou erros de script sem recorrer a extensões de terceiros, garantindo que o ambiente de diagnóstico seja tão leve quanto o próprio navegador.
+
+4. Protocolos de Privacidade e Gestão de Sessão
+
+A segurança da informação e a gestão da identidade digital são tratadas com rigor, oferecendo dois modos distintos de operação para proteger a integridade dos dados do utilizador.
+
+* Modo Anónimo (Privado): Ativado através do atalho Ctrl+Shift+N, este modo inicia um perfil temporário isolado. As garantias incluem a não persistência de histórico, cookies ou dados temporários. O LocalStorage é desativado para mitigar o rastreamento persistente. Visualmente, o utilizador é alertado pela presença do ícone "🕶️" nas abas e por uma alteração clara no título da janela.
+* Gestão de Histórico e Persistência: No modo normal, o navegador armazena os últimos 100 itens visitados no ficheiro historico.json. Este ficheiro guarda metadados de data e hora, permitindo auditorias manuais rápidas.
+* Segurança Ativa de Scripts: O utilizador mantém o controlo total sobre a execução de JavaScript, podendo desativar o motor nas preferências para navegar em domínios suspeitos sem risco de execução de scripts maliciosos.
+
+Camada "So What?": O isolamento estrito de perfis no modo anónimo garante que as sessões de navegação não deixem resíduos no sistema anfitrião. Esta arquitetura de sandboxing temporário é crucial para mitigar técnicas de browser fingerprinting e proteger a privacidade em ambientes partilhados.
+
+5. Personalização e Extensibilidade Estética (Skins)
+
+O sistema de temas do Python Navigator não é apenas um recurso estético, mas um diferencial de ergonomia (UX) que permite a adaptação do ambiente de trabalho a diferentes condições de luminosidade e preferências corporativas.
+
+* Temas Nativos: O software disponibiliza os perfis "Claro", "Escuro" e "Azul", com pré-visualização instantânea no menu de preferências.
+* Arquitetura QSS (Qt Style Sheets): A personalização é feita através de ficheiros .css depositados na pasta skins/. Ao utilizar seletores Qt, o utilizador pode modificar não só o conteúdo web, mas todo o chrome (interface nativa) da aplicação.
+
+Exemplo de Estrutura de Estilo (QSS):
+
+/* Customização da Barra de Menus e Botões via Seletores Qt */
+QMenuBar {
+    background-color: #2b2b2b;
+    color: #ffffff;
+}
+
+QPushButton {
+    background: #3c3c3c;
+    border: 1px solid #555;
+    border-radius: 3px;
+    color: #ffffff;
+}
+
+
+Camada "So What?": A abertura do sistema para CSS personalizado permite que empresas alinhem o navegador à sua identidade visual corporativa ou implementem ajustes de acessibilidade específicos (como alto contraste), garantindo que a ferramenta se integre perfeitamente em qualquer ecossistema profissional.
+
+6. Referência Operacional: Comandos e Atalhos de Produtividade
+
+A eficiência operacional no Python Navigator 1.0.1 é maximizada através de um sistema de atalhos abrangente, desenhado para reduzir a latência entre a intenção do utilizador e a execução do sistema.
+
+Tabela de Atalhos de Teclado
+
+Atalho	Funcionalidade
+Ctrl+T	Nova Aba
+Ctrl+W	Fechar Aba Atual
+Ctrl+N	Nova Janela (Normal)
+Ctrl+Shift+N	Nova Janela Anónima (🕶️)
+Ctrl+O	Abrir Ficheiro HTML Local
+Ctrl+U	Visualizar Código Fonte
+Ctrl+Shift+J	Abrir Consola JavaScript
+Ctrl+H	Consultar Histórico
+Ctrl+P	Abrir Configurações / Preferências
+Ctrl+Q	Sair da Aplicação
+F5	Recarregar Página Atual
+Ctrl++ / Ctrl+-	Aumentar / Diminuir Zoom (Feedback na Status Bar)
+Ctrl+0	Restaurar Zoom Padrão (100%)
+Alt+← / Alt+→	Retroceder / Avançar na Navegação
+
+Configurações de Sistema e Evolução
+
+O painel de preferências permite configurar a URL da Página Inicial, definir o Motor de Busca Padrão e gerir a ativação do motor de JavaScript e da consola. A versão 1.0.1 estabelece uma fundação estável, com o roteiro de desenvolvimento a prever a inclusão de gestores de downloads e sistemas de marcadores em versões futuras.
+
+Conclusão Operacional ("So What?"): O domínio desta matriz de comandos transforma o ato de navegar numa experiência técnica fluida. Ao eliminar a necessidade de navegação por menus complexos, o utilizador atinge um estado de fluxo que é indispensável em tarefas de diagnóstico e pesquisa intensiva.
