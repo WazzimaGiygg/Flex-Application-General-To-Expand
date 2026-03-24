@@ -1,100 +1,15 @@
 import sys
 import os
 import json
+import shutil
+import tempfile
+import uuid
 from datetime import datetime
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtWebEngineWidgets import *
 from PyQt5.QtGui import *
 from urllib.parse import quote
-
-class ConsoleWindow(QDialog):
-    """Janela do console JavaScript"""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.setWindowTitle("Console JavaScript - Python Navigator")
-        self.setGeometry(300, 300, 800, 500)
-        
-        layout = QVBoxLayout()
-        
-        # Filtros
-        filter_layout = QHBoxLayout()
-        filter_layout.addWidget(QLabel("Filtrar:"))
-        
-        self.filter_input = QLineEdit()
-        self.filter_input.setPlaceholderText("Digite para filtrar mensagens...")
-        self.filter_input.textChanged.connect(self.filtrar_mensagens)
-        filter_layout.addWidget(self.filter_input)
-        
-        self.btn_clear = QPushButton("Limpar")
-        self.btn_clear.clicked.connect(self.limpar_console)
-        filter_layout.addWidget(self.btn_clear)
-        
-        self.btn_close = QPushButton("Fechar")
-        self.btn_close.clicked.connect(self.accept)
-        filter_layout.addWidget(self.btn_close)
-        
-        layout.addLayout(filter_layout)
-        
-        # Lista de mensagens
-        self.messages_list = QListWidget()
-        self.messages_list.setFont(QFont("Courier New", 9))
-        layout.addWidget(self.messages_list)
-        
-        self.setLayout(layout)
-        
-        self.all_messages = []
-    
-    def adicionar_mensagem(self, mensagem, tipo="info"):
-        """Adicionar mensagem ao console"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        
-        # Definir cor baseada no tipo
-        cor = {
-            "info": "blue",
-            "warning": "orange",
-            "error": "red",
-            "deprecation": "purple"
-        }.get(tipo, "black")
-        
-        item_text = f"[{timestamp}] [{tipo.upper()}] {mensagem}"
-        self.all_messages.append((item_text, tipo))
-        
-        if self.filtrar_mensagens_por_texto(item_text):
-            item = QListWidgetItem(item_text)
-            item.setForeground(QColor(cor))
-            self.messages_list.addItem(item)
-            self.messages_list.scrollToBottom()
-    
-    def filtrar_mensagens(self):
-        """Filtrar mensagens baseado no texto"""
-        texto_filtro = self.filter_input.text().lower()
-        self.messages_list.clear()
-        
-        for item_text, tipo in self.all_messages:
-            if texto_filtro in item_text.lower():
-                item = QListWidgetItem(item_text)
-                cor = {
-                    "info": "blue",
-                    "warning": "orange",
-                    "error": "red",
-                    "deprecation": "purple"
-                }.get(tipo, "black")
-                item.setForeground(QColor(cor))
-                self.messages_list.addItem(item)
-    
-    def filtrar_mensagens_por_texto(self, texto):
-        """Verificar se a mensagem deve ser exibida baseado no filtro atual"""
-        texto_filtro = self.filter_input.text().lower()
-        if not texto_filtro:
-            return True
-        return texto_filtro in texto.lower()
-    
-    def limpar_console(self):
-        """Limpar todas as mensagens do console"""
-        self.all_messages.clear()
-        self.messages_list.clear()
 
 class VisualizadorCodigoFonte(QDialog):
     """Janela para visualizar código fonte HTML"""
@@ -355,6 +270,162 @@ class SyntaxHighlighter(QSyntaxHighlighter):
                 length = expression.matchedLength()
                 self.setFormat(index, length, format)
                 index = expression.indexIn(text, index + length)
+
+class ConsoleWindow(QDialog):
+    """Janela do console JavaScript"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.setWindowTitle("Console JavaScript - Python Navigator")
+        self.setGeometry(300, 300, 800, 500)
+        
+        layout = QVBoxLayout()
+        
+        # Filtros
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Filtrar:"))
+        
+        self.filter_input = QLineEdit()
+        self.filter_input.setPlaceholderText("Digite para filtrar mensagens...")
+        self.filter_input.textChanged.connect(self.filtrar_mensagens)
+        filter_layout.addWidget(self.filter_input)
+        
+        self.btn_clear = QPushButton("Limpar")
+        self.btn_clear.clicked.connect(self.limpar_console)
+        filter_layout.addWidget(self.btn_clear)
+        
+        self.btn_close = QPushButton("Fechar")
+        self.btn_close.clicked.connect(self.accept)
+        filter_layout.addWidget(self.btn_close)
+        
+        layout.addLayout(filter_layout)
+        
+        # Lista de mensagens
+        self.messages_list = QListWidget()
+        self.messages_list.setFont(QFont("Courier New", 9))
+        layout.addWidget(self.messages_list)
+        
+        self.setLayout(layout)
+        
+        self.all_messages = []
+    
+    def adicionar_mensagem(self, mensagem, tipo="info"):
+        """Adicionar mensagem ao console"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        # Definir cor baseada no tipo
+        cor = {
+            "info": "blue",
+            "warning": "orange",
+            "error": "red",
+            "deprecation": "purple"
+        }.get(tipo, "black")
+        
+        item_text = f"[{timestamp}] [{tipo.upper()}] {mensagem}"
+        self.all_messages.append((item_text, tipo))
+        
+        if self.filtrar_mensagens_por_texto(item_text):
+            item = QListWidgetItem(item_text)
+            item.setForeground(QColor(cor))
+            self.messages_list.addItem(item)
+            self.messages_list.scrollToBottom()
+    
+    def filtrar_mensagens(self):
+        """Filtrar mensagens baseado no texto"""
+        texto_filtro = self.filter_input.text().lower()
+        self.messages_list.clear()
+        
+        for item_text, tipo in self.all_messages:
+            if texto_filtro in item_text.lower():
+                item = QListWidgetItem(item_text)
+                cor = {
+                    "info": "blue",
+                    "warning": "orange",
+                    "error": "red",
+                    "deprecation": "purple"
+                }.get(tipo, "black")
+                item.setForeground(QColor(cor))
+                self.messages_list.addItem(item)
+    
+    def filtrar_mensagens_por_texto(self, texto):
+        """Verificar se a mensagem deve ser exibida baseado no filtro atual"""
+        texto_filtro = self.filter_input.text().lower()
+        if not texto_filtro:
+            return True
+        return texto_filtro in texto.lower()
+    
+    def limpar_console(self):
+        """Limpar todas as mensagens do console"""
+        self.all_messages.clear()
+        self.messages_list.clear()
+
+class HistoricoWindow(QDialog):
+    """Janela de histórico"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.setWindowTitle("Histórico - Python Navigator")
+        self.setGeometry(300, 300, 600, 400)
+        
+        layout = QVBoxLayout()
+        
+        # Lista de histórico
+        self.historico_list = QListWidget()
+        self.historico_list.itemDoubleClicked.connect(self.abrir_historico)
+        layout.addWidget(QLabel("Histórico de navegação:"))
+        layout.addWidget(self.historico_list)
+        
+        # Botões
+        buttons_layout = QHBoxLayout()
+        btn_clear = QPushButton("Limpar histórico")
+        btn_close = QPushButton("Fechar")
+        btn_clear.clicked.connect(self.limpar_historico)
+        btn_close.clicked.connect(self.accept)
+        buttons_layout.addWidget(btn_clear)
+        buttons_layout.addWidget(btn_close)
+        layout.addLayout(buttons_layout)
+        
+        self.setLayout(layout)
+        
+        # Carregar histórico
+        self.carregar_historico()
+    
+    def carregar_historico(self):
+        """Carregar histórico do arquivo"""
+        try:
+            if os.path.exists("historico.json"):
+                with open("historico.json", "r", encoding="utf-8") as f:
+                    historico = json.load(f)
+                    for item in reversed(historico):  # Mostrar do mais recente
+                        titulo = item.get("titulo", "Sem título")
+                        url = item.get("url", "")
+                        data = item.get("data", "")
+                        self.historico_list.addItem(f"{data} - {titulo}\n{url}")
+        except Exception as e:
+            print(f"Erro ao carregar histórico: {e}")
+    
+    def abrir_historico(self, item):
+        """Abrir URL do histórico"""
+        texto = item.text()
+        linhas = texto.split("\n")
+        if len(linhas) >= 2:
+            url = linhas[1]
+            self.parent.nova_aba(url)
+            self.accept()
+    
+    def limpar_historico(self):
+        """Limpar histórico"""
+        reply = QMessageBox.question(self, "Confirmar", 
+                                     "Tem certeza que deseja limpar todo o histórico?",
+                                     QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            try:
+                if os.path.exists("historico.json"):
+                    os.remove("historico.json")
+                self.historico_list.clear()
+                QMessageBox.information(self, "Sucesso", "Histórico limpo com sucesso!")
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao limpar histórico: {e}")
 
 class ConfiguracoesWindow(QDialog):
     """Janela de configurações"""
@@ -734,74 +805,6 @@ QLabel {
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao salvar configurações: {e}")
 
-class HistoricoWindow(QDialog):
-    """Janela de histórico"""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.setWindowTitle("Histórico - Python Navigator")
-        self.setGeometry(300, 300, 600, 400)
-        
-        layout = QVBoxLayout()
-        
-        # Lista de histórico
-        self.historico_list = QListWidget()
-        self.historico_list.itemDoubleClicked.connect(self.abrir_historico)
-        layout.addWidget(QLabel("Histórico de navegação:"))
-        layout.addWidget(self.historico_list)
-        
-        # Botões
-        buttons_layout = QHBoxLayout()
-        btn_clear = QPushButton("Limpar histórico")
-        btn_close = QPushButton("Fechar")
-        btn_clear.clicked.connect(self.limpar_historico)
-        btn_close.clicked.connect(self.accept)
-        buttons_layout.addWidget(btn_clear)
-        buttons_layout.addWidget(btn_close)
-        layout.addLayout(buttons_layout)
-        
-        self.setLayout(layout)
-        
-        # Carregar histórico
-        self.carregar_historico()
-    
-    def carregar_historico(self):
-        """Carregar histórico do arquivo"""
-        try:
-            if os.path.exists("historico.json"):
-                with open("historico.json", "r", encoding="utf-8") as f:
-                    historico = json.load(f)
-                    for item in reversed(historico):  # Mostrar do mais recente
-                        titulo = item.get("titulo", "Sem título")
-                        url = item.get("url", "")
-                        data = item.get("data", "")
-                        self.historico_list.addItem(f"{data} - {titulo}\n{url}")
-        except Exception as e:
-            print(f"Erro ao carregar histórico: {e}")
-    
-    def abrir_historico(self, item):
-        """Abrir URL do histórico"""
-        texto = item.text()
-        linhas = texto.split("\n")
-        if len(linhas) >= 2:
-            url = linhas[1]
-            self.parent.nova_aba(url)
-            self.accept()
-    
-    def limpar_historico(self):
-        """Limpar histórico"""
-        reply = QMessageBox.question(self, "Confirmar", 
-                                     "Tem certeza que deseja limpar todo o histórico?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            try:
-                if os.path.exists("historico.json"):
-                    os.remove("historico.json")
-                self.historico_list.clear()
-                QMessageBox.information(self, "Sucesso", "Histórico limpo com sucesso!")
-            except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Erro ao limpar histórico: {e}")
-
 class SobreWindow(QDialog):
     """Janela Sobre"""
     def __init__(self, parent=None):
@@ -835,6 +838,7 @@ class SobreWindow(QDialog):
         
         label_features = QLabel("""<b>Funcionalidades:</b><br>
         • Múltiplas abas<br>
+        • Modo anônimo (privado)<br>
         • Histórico de navegação<br>
         • Visualizador de código fonte<br>
         • Console JavaScript<br>
@@ -860,6 +864,453 @@ class SobreWindow(QDialog):
         layout.addWidget(btn_close)
         
         self.setLayout(layout)
+
+class NavegadorAnonimo(QMainWindow):
+    """Janela de navegação anônima (modo privado)"""
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("🐍 Python Navigator - Modo Anônimo")
+        self.setGeometry(100, 100, 1200, 800)
+        
+        # Configurar página inicial padrão
+        self.home_page = "https://www.google.com"
+        self.search_engines = {
+            "Google": "https://www.google.com/search?q={}",
+            "Bing": "https://www.bing.com/search?q={}",
+            "DuckDuckGo": "https://duckduckgo.com/?q={}"
+        }
+        
+        # Identificador do navegador
+        self.browser_name = "PythonNavigator"
+        self.browser_version = "1.0.1"
+        self.user_agent = f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) {self.browser_name}/{self.browser_version} Chrome/120.0.0.0 Safari/537.36"
+        
+        # Configurações de JavaScript (sempre ativado no modo anônimo)
+        self.javascript_enabled = True
+        
+        # Dicionário para mapear abas para seus web views
+        self.web_views = {}
+        
+        # Criar perfil anônimo
+        self.create_anonymous_profile()
+        
+        self.init_ui()
+        
+        # Criar primeira aba
+        self.nova_aba()
+        
+        # Mostrar aviso de modo anônimo
+        self.statusBar().showMessage("Modo anônimo ativado - Seu histórico não será salvo", 5000)
+        
+        # Mensagem informativa
+        QMessageBox.information(self, "Modo Anônimo", 
+                                "Você está navegando em modo anônimo.\n\n"
+                                "✓ Histórico não será salvo\n"
+                                "✓ Cookies não serão mantidos\n"
+                                "✓ Dados temporários serão apagados ao fechar\n\n"
+                                "Observação: Isso não torna sua navegação completamente anônima na internet.",
+                                QMessageBox.Ok)
+    
+    def create_anonymous_profile(self):
+        """Criar perfil anônimo temporário"""
+        # Criar pasta temporária para o perfil anônimo
+        self.temp_profile_dir = os.path.join(tempfile.gettempdir(), f"python_navigator_anon_{uuid.uuid4().hex}")
+        
+        # Criar perfil
+        self.profile = QWebEngineProfile("Anonymous", self)
+        self.profile.setPersistentStoragePath(self.temp_profile_dir)
+        self.profile.setPersistentCookiesPolicy(QWebEngineProfile.NoPersistentCookies)
+        self.profile.setHttpCacheType(QWebEngineProfile.DiskHttpCache)
+        self.profile.setHttpUserAgent(self.user_agent)
+        
+        # Configurar para não salvar dados
+        settings = self.profile.settings()
+        settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.JavascriptCanOpenWindows, True)
+        settings.setAttribute(QWebEngineSettings.JavascriptCanAccessClipboard, True)
+        settings.setAttribute(QWebEngineSettings.LocalStorageEnabled, False)
+        settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, False)
+    
+    def init_ui(self):
+        """Inicializar interface do usuário"""
+        # Criar menus
+        menubar = self.menuBar()
+        
+        # Menu Arquivo
+        file_menu = menubar.addMenu("Arquivo")
+        
+        nova_aba_anonima_action = QAction("Nova aba anônima", self)
+        nova_aba_anonima_action.setShortcut("Ctrl+Shift+N")
+        nova_aba_anonima_action.triggered.connect(self.nova_aba)
+        file_menu.addAction(nova_aba_anonima_action)
+        
+        file_menu.addSeparator()
+        
+        abrir_arquivo_action = QAction("Abrir arquivo HTML...", self)
+        abrir_arquivo_action.setShortcut("Ctrl+O")
+        abrir_arquivo_action.triggered.connect(self.abrir_arquivo_html)
+        file_menu.addAction(abrir_arquivo_action)
+        
+        file_menu.addSeparator()
+        
+        sair_action = QAction("Sair", self)
+        sair_action.setShortcut("Ctrl+Q")
+        sair_action.triggered.connect(self.close)
+        file_menu.addAction(sair_action)
+        
+        # Menu Exibir
+        view_menu = menubar.addMenu("Exibir")
+        
+        ver_codigo_action = QAction("Código fonte da página", self)
+        ver_codigo_action.setShortcut("Ctrl+U")
+        ver_codigo_action.triggered.connect(self.visualizar_codigo_fonte)
+        view_menu.addAction(ver_codigo_action)
+        
+        view_menu.addSeparator()
+        
+        zoom_in_action = QAction("Aumentar zoom", self)
+        zoom_in_action.setShortcut("Ctrl++")
+        zoom_in_action.triggered.connect(self.zoom_in)
+        view_menu.addAction(zoom_in_action)
+        
+        zoom_out_action = QAction("Diminuir zoom", self)
+        zoom_out_action.setShortcut("Ctrl+-")
+        zoom_out_action.triggered.connect(self.zoom_out)
+        view_menu.addAction(zoom_out_action)
+        
+        zoom_reset_action = QAction("Zoom padrão", self)
+        zoom_reset_action.setShortcut("Ctrl+0")
+        zoom_reset_action.triggered.connect(self.zoom_reset)
+        view_menu.addAction(zoom_reset_action)
+        
+        # Widget central
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Layout principal
+        main_layout = QVBoxLayout()
+        central_widget.setLayout(main_layout)
+        
+        # Barra de navegação
+        nav_bar = QHBoxLayout()
+        
+        # Botões de navegação
+        self.btn_back = QPushButton("◀")
+        self.btn_forward = QPushButton("▶")
+        self.btn_refresh = QPushButton("⟳")
+        self.btn_home = QPushButton("🏠")
+        self.btn_code = QPushButton("</> Código")
+        self.btn_new_tab = QPushButton("+ Nova Aba")
+        
+        self.btn_back.clicked.connect(self.go_back)
+        self.btn_forward.clicked.connect(self.go_forward)
+        self.btn_refresh.clicked.connect(self.refresh_page)
+        self.btn_home.clicked.connect(self.go_home)
+        self.btn_code.clicked.connect(self.visualizar_codigo_fonte)
+        self.btn_new_tab.clicked.connect(lambda: self.nova_aba())
+        
+        # Configurar estilo do botão código
+        self.btn_code.setStyleSheet("""
+            QPushButton {
+                background: #6c757d;
+                color: white;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #5a6268;
+            }
+        """)
+        
+        # Barra de URL
+        self.url_bar = QLineEdit()
+        self.url_bar.returnPressed.connect(self.navigate_to_url)
+        
+        # Adicionar widgets à barra de navegação
+        nav_bar.addWidget(self.btn_back)
+        nav_bar.addWidget(self.btn_forward)
+        nav_bar.addWidget(self.btn_refresh)
+        nav_bar.addWidget(self.btn_home)
+        nav_bar.addWidget(self.btn_code)
+        nav_bar.addWidget(self.btn_new_tab)
+        nav_bar.addWidget(self.url_bar)
+        
+        # Sistema de abas
+        self.tabs = QTabWidget()
+        self.tabs.setTabsClosable(True)
+        self.tabs.tabCloseRequested.connect(self.close_tab)
+        self.tabs.currentChanged.connect(self.current_tab_changed)
+        
+        # Adicionar layouts
+        main_layout.addLayout(nav_bar)
+        main_layout.addWidget(self.tabs)
+        
+        # Atalhos de teclado
+        self.shortcut_new = QShortcut(QKeySequence("Ctrl+T"), self)
+        self.shortcut_new.activated.connect(lambda: self.nova_aba())
+        
+        self.shortcut_new_anon = QShortcut(QKeySequence("Ctrl+Shift+N"), self)
+        self.shortcut_new_anon.activated.connect(lambda: self.nova_aba())
+        
+        self.shortcut_close = QShortcut(QKeySequence("Ctrl+W"), self)
+        self.shortcut_close.activated.connect(lambda: self.close_tab(self.tabs.currentIndex()))
+        
+        self.shortcut_refresh = QShortcut(QKeySequence("F5"), self)
+        self.shortcut_refresh.activated.connect(self.refresh_page)
+        
+        self.shortcut_code = QShortcut(QKeySequence("Ctrl+U"), self)
+        self.shortcut_code.activated.connect(self.visualizar_codigo_fonte)
+        
+        self.shortcut_zoom_in = QShortcut(QKeySequence("Ctrl++"), self)
+        self.shortcut_zoom_in.activated.connect(self.zoom_in)
+        
+        self.shortcut_zoom_out = QShortcut(QKeySequence("Ctrl+-"), self)
+        self.shortcut_zoom_out.activated.connect(self.zoom_out)
+        
+        self.shortcut_zoom_reset = QShortcut(QKeySequence("Ctrl+0"), self)
+        self.shortcut_zoom_reset.activated.connect(self.zoom_reset)
+        
+        # Adicionar identificador na barra de título
+        self.statusBar().showMessage("Python Navigator - Modo Anônimo - Navegação privada ativada")
+    
+    def zoom_in(self):
+        """Aumentar zoom da página"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            factor = web_view.zoomFactor()
+            web_view.setZoomFactor(factor + 0.1)
+            self.statusBar().showMessage(f"Zoom: {int((factor + 0.1) * 100)}%", 2000)
+    
+    def zoom_out(self):
+        """Diminuir zoom da página"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            factor = web_view.zoomFactor()
+            web_view.setZoomFactor(max(0.3, factor - 0.1))
+            self.statusBar().showMessage(f"Zoom: {int((factor - 0.1) * 100)}%", 2000)
+    
+    def zoom_reset(self):
+        """Resetar zoom para padrão"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            web_view.setZoomFactor(1.0)
+            self.statusBar().showMessage("Zoom: 100%", 2000)
+    
+    def abrir_arquivo_html(self):
+        """Abrir arquivo HTML local"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, 
+            "Abrir arquivo HTML - Python Navigator (Modo Anônimo)", 
+            "", 
+            "Arquivos HTML (*.html *.htm);;Todos os arquivos (*.*)"
+        )
+        
+        if file_path:
+            # Converter caminho para URL
+            file_url = QUrl.fromLocalFile(file_path)
+            self.nova_aba(file_url.toString())
+    
+    def visualizar_codigo_fonte(self):
+        """Visualizar código fonte da página atual"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            url = web_view.url().toString()
+            titulo = web_view.title()
+            
+            # Mostrar mensagem de carregamento
+            self.statusBar().showMessage("Carregando código fonte...")
+            
+            # Obter HTML da página
+            web_view.page().toHtml(lambda html: self.mostrar_visualizador_codigo(url, html, titulo))
+    
+    def mostrar_visualizador_codigo(self, url, html, titulo):
+        """Mostrar janela do visualizador de código fonte"""
+        visualizador = VisualizadorCodigoFonte(self, url, html, titulo)
+        visualizador.exec_()
+        self.statusBar().showMessage("Código fonte carregado", 3000)
+    
+    def nova_aba(self, url=None):
+        """Criar uma nova aba com uma página web"""
+        # Verificar se url é booleano ou None
+        if url is None or isinstance(url, bool):
+            url = self.home_page
+        elif not isinstance(url, str):
+            url = str(url)
+        
+        # Garantir que é uma string
+        url_str = str(url)
+        
+        # Criar widget da aba
+        tab_widget = QWidget()
+        layout = QVBoxLayout()
+        tab_widget.setLayout(layout)
+        
+        # Criar web view com perfil anônimo
+        web_view = QWebEngineView()
+        web_view.setPage(QWebEnginePage(self.profile, web_view))
+        
+        # Configurar user agent
+        web_view.page().profile().setHttpUserAgent(self.user_agent)
+        
+        # Configurar JavaScript
+        settings = web_view.page().settings()
+        settings.setAttribute(QWebEngineSettings.JavascriptEnabled, self.javascript_enabled)
+        settings.setAttribute(QWebEngineSettings.JavascriptCanOpenWindows, self.javascript_enabled)
+        settings.setAttribute(QWebEngineSettings.JavascriptCanAccessClipboard, self.javascript_enabled)
+        
+        # Outras configurações
+        settings.setAttribute(QWebEngineSettings.PluginsEnabled, True)
+        settings.setAttribute(QWebEngineSettings.LocalStorageEnabled, False)  # Desativar localStorage no modo anônimo
+        settings.setAttribute(QWebEngineSettings.WebGLEnabled, True)
+        settings.setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
+        settings.setAttribute(QWebEngineSettings.AutoLoadImages, True)
+        
+        # Carregar URL
+        try:
+            web_view.setUrl(QUrl(url_str))
+        except Exception as e:
+            print(f"Erro ao carregar URL: {e}")
+            web_view.setUrl(QUrl(self.home_page))
+        
+        # Conectar sinais
+        web_view.urlChanged.connect(self.on_url_changed)
+        web_view.titleChanged.connect(self.on_title_changed)
+        web_view.loadFinished.connect(self.on_load_finished)
+        
+        layout.addWidget(web_view)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Adicionar aba com ícone de máscara
+        index = self.tabs.addTab(tab_widget, "🕶️ Carregando...")
+        self.tabs.setCurrentIndex(index)
+        
+        # Armazenar o web view
+        self.web_views[tab_widget] = web_view
+        
+        return web_view
+    
+    def get_current_web_view(self):
+        """Obter o web view da aba atual"""
+        current_widget = self.tabs.currentWidget()
+        if current_widget and current_widget in self.web_views:
+            return self.web_views[current_widget]
+        return None
+    
+    def get_tab_widget_from_web_view(self, web_view):
+        """Obter o widget da aba a partir do web view"""
+        for tab_widget, wv in self.web_views.items():
+            if wv == web_view:
+                return tab_widget
+        return None
+    
+    def navigate_to_url(self):
+        """Navegar para a URL digitada na barra de endereço"""
+        url = self.url_bar.text().strip()
+        if not url:
+            return
+            
+        if not url.startswith("http://") and not url.startswith("https://"):
+            # Verificar se é uma pesquisa ou URL
+            if '.' in url and ' ' not in url and not url.startswith("file://"):
+                url = "https://" + url
+            else:
+                # Se não parecer uma URL, fazer pesquisa no motor de busca
+                url = self.search_engines.get("Google", "https://www.google.com/search?q={}").format(quote(url))
+        
+        web_view = self.get_current_web_view()
+        if web_view:
+            web_view.setUrl(QUrl(url))
+    
+    def on_url_changed(self, url):
+        """Quando a URL muda em qualquer aba"""
+        web_view = self.sender()
+        current_view = self.get_current_web_view()
+        
+        # Atualizar barra de URL apenas se for a aba atual
+        if current_view == web_view:
+            self.url_bar.setText(url.toString())
+            self.url_bar.setCursorPosition(0)
+    
+    def on_title_changed(self, title):
+        """Quando o título muda em qualquer aba"""
+        web_view = self.sender()
+        tab_widget = self.get_tab_widget_from_web_view(web_view)
+        
+        if tab_widget:
+            index = self.tabs.indexOf(tab_widget)
+            if index >= 0:
+                if len(title) > 30:
+                    title = title[:27] + "..."
+                # Adicionar ícone de máscara nas abas anônimas
+                self.tabs.setTabText(index, f"🕶️ {title}" if title else "🕶️ Nova aba")
+    
+    def on_load_finished(self, ok):
+        """Quando o carregamento da página termina"""
+        self.update_navigation_buttons()
+        self.statusBar().showMessage("Python Navigator - Modo Anônimo - Página carregada", 3000)
+    
+    def update_navigation_buttons(self):
+        """Atualizar o estado dos botões de navegação"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            self.btn_back.setEnabled(web_view.history().canGoBack())
+            self.btn_forward.setEnabled(web_view.history().canGoForward())
+    
+    def go_back(self):
+        """Voltar uma página"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            web_view.back()
+    
+    def go_forward(self):
+        """Avançar uma página"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            web_view.forward()
+    
+    def refresh_page(self):
+        """Recarregar a página atual"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            web_view.reload()
+    
+    def go_home(self):
+        """Ir para a página inicial"""
+        web_view = self.get_current_web_view()
+        if web_view:
+            web_view.setUrl(QUrl(self.home_page))
+    
+    def close_tab(self, index):
+        """Fechar uma aba específica"""
+        if self.tabs.count() > 1:
+            tab_widget = self.tabs.widget(index)
+            if tab_widget:
+                # Remover do dicionário
+                if tab_widget in self.web_views:
+                    del self.web_views[tab_widget]
+                # Fechar a aba
+                self.tabs.removeTab(index)
+                tab_widget.deleteLater()
+        else:
+            # Se for a última aba, fechar o navegador
+            self.close()
+    
+    def current_tab_changed(self, index):
+        """Quando a aba atual muda, atualizar a interface"""
+        if index >= 0:
+            web_view = self.get_current_web_view()
+            if web_view:
+                self.url_bar.setText(web_view.url().toString())
+                self.update_navigation_buttons()
+    
+    def closeEvent(self, event):
+        """Quando fechar a janela, limpar dados temporários"""
+        try:
+            # Limpar pasta temporária
+            if hasattr(self, 'temp_profile_dir') and os.path.exists(self.temp_profile_dir):
+                shutil.rmtree(self.temp_profile_dir, ignore_errors=True)
+        except Exception as e:
+            print(f"Erro ao limpar dados temporários: {e}")
+        event.accept()
 
 class NavegadorWeb(QMainWindow):
     def __init__(self):
@@ -1034,6 +1485,11 @@ class NavegadorWeb(QMainWindow):
         except Exception as e:
             print(f"Erro ao salvar histórico: {e}")
     
+    def abrir_janela_anonima(self):
+        """Abrir nova janela em modo anônimo"""
+        self.janela_anonima = NavegadorAnonimo()
+        self.janela_anonima.show()
+    
     def visualizar_codigo_fonte(self):
         """Visualizar código fonte da página atual"""
         web_view = self.get_current_web_view()
@@ -1060,9 +1516,12 @@ class NavegadorWeb(QMainWindow):
         self.console_window.show()
         self.console_window.raise_()
     
-    def on_java_script_message(self, message):
+    def on_java_script_message(self, level, message, line, source):
         """Receber mensagens do JavaScript"""
-        if self.console_enabled and self.console_window:
+        if self.console_enabled:
+            if not self.console_window:
+                self.console_window = ConsoleWindow(self)
+            
             # Identificar tipo da mensagem
             tipo = "info"
             if "deprecated" in message.lower():
@@ -1076,19 +1535,23 @@ class NavegadorWeb(QMainWindow):
     
     def init_ui(self):
         """Inicializar interface do usuário"""
-        # Configurar perfil para capturar mensagens JavaScript
-        profile = QWebEngineProfile.defaultProfile()
-        
-        # Criar um novo perfil para capturar mensagens
-        if self.console_enabled:
-            # Conectar sinal para mensagens JavaScript
-            profile.setHttpUserAgent(self.user_agent)
-        
         # Criar menus
         menubar = self.menuBar()
         
         # Menu Arquivo
         file_menu = menubar.addMenu("Arquivo")
+        
+        nova_janela_action = QAction("Nova janela", self)
+        nova_janela_action.setShortcut("Ctrl+N")
+        nova_janela_action.triggered.connect(self.nova_janela)
+        file_menu.addAction(nova_janela_action)
+        
+        nova_janela_anonima_action = QAction("Nova janela anônima", self)
+        nova_janela_anonima_action.setShortcut("Ctrl+Shift+N")
+        nova_janela_anonima_action.triggered.connect(self.abrir_janela_anonima)
+        file_menu.addAction(nova_janela_anonima_action)
+        
+        file_menu.addSeparator()
         
         abrir_arquivo_action = QAction("Abrir arquivo HTML...", self)
         abrir_arquivo_action.setShortcut("Ctrl+O")
@@ -1177,6 +1640,7 @@ class NavegadorWeb(QMainWindow):
         self.btn_home = QPushButton("🏠")
         self.btn_code = QPushButton("</> Código")
         self.btn_console = QPushButton("📋 Console")
+        self.btn_anonimo = QPushButton("🕶️ Anônimo")
         self.btn_new_tab = QPushButton("+ Nova Aba")
         
         self.btn_back.clicked.connect(self.go_back)
@@ -1185,6 +1649,7 @@ class NavegadorWeb(QMainWindow):
         self.btn_home.clicked.connect(self.go_home)
         self.btn_code.clicked.connect(self.visualizar_codigo_fonte)
         self.btn_console.clicked.connect(self.mostrar_console)
+        self.btn_anonimo.clicked.connect(self.abrir_janela_anonima)
         self.btn_new_tab.clicked.connect(lambda: self.nova_aba())
         
         # Configurar estilo dos botões
@@ -1210,6 +1675,17 @@ class NavegadorWeb(QMainWindow):
             }
         """)
         
+        self.btn_anonimo.setStyleSheet("""
+            QPushButton {
+                background: #28a745;
+                color: white;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #218838;
+            }
+        """)
+        
         # Barra de URL
         self.url_bar = QLineEdit()
         self.url_bar.returnPressed.connect(self.navigate_to_url)
@@ -1221,6 +1697,7 @@ class NavegadorWeb(QMainWindow):
         nav_bar.addWidget(self.btn_home)
         nav_bar.addWidget(self.btn_code)
         nav_bar.addWidget(self.btn_console)
+        nav_bar.addWidget(self.btn_anonimo)
         nav_bar.addWidget(self.btn_new_tab)
         nav_bar.addWidget(self.url_bar)
         
@@ -1237,6 +1714,12 @@ class NavegadorWeb(QMainWindow):
         # Atalhos de teclado
         self.shortcut_new = QShortcut(QKeySequence("Ctrl+T"), self)
         self.shortcut_new.activated.connect(lambda: self.nova_aba())
+        
+        self.shortcut_new_window = QShortcut(QKeySequence("Ctrl+N"), self)
+        self.shortcut_new_window.activated.connect(self.nova_janela)
+        
+        self.shortcut_new_anon = QShortcut(QKeySequence("Ctrl+Shift+N"), self)
+        self.shortcut_new_anon.activated.connect(self.abrir_janela_anonima)
         
         self.shortcut_close = QShortcut(QKeySequence("Ctrl+W"), self)
         self.shortcut_close.activated.connect(lambda: self.close_tab(self.tabs.currentIndex()))
@@ -1262,6 +1745,11 @@ class NavegadorWeb(QMainWindow):
         # Adicionar identificador na barra de título
         js_status = "JS: ON" if self.javascript_enabled else "JS: OFF"
         self.statusBar().showMessage(f"Python Navigator {self.browser_version} - {js_status} - Pronto")
+    
+    def nova_janela(self):
+        """Abrir nova janela normal"""
+        nova_janela = NavegadorWeb()
+        nova_janela.show()
     
     def zoom_in(self):
         """Aumentar zoom da página"""
