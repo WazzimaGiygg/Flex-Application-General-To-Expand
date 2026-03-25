@@ -1,0 +1,130 @@
+# 📱 Explicação do Funcionamento do Cripto Mobile
+
+## 🎯 Visão Geral
+O Cripto Mobile é um aplicativo desktop que permite **criptografar e descriptografar textos** usando criptografia AES-256, uma das mais seguras disponíveis atualmente. É como ter um cofre digital para suas mensagens!
+
+## 🔐 Como a Criptografia Funciona
+
+### 1. **Processo de Criptografia**
+Quando você digita um texto e uma senha:
+
+```
+Texto original → Senha → AES-256 → Texto criptografado (base64)
+```
+
+**Passo a passo técnico:**
+1. **Salt Aleatório**: Gera um valor aleatório único (16 bytes) - como um "tempero" que torna cada criptografia única
+2. **Derivação de Chave (PBKDF2)**: Transforma sua senha em uma chave de 256 bits usando 100.000 iterações - isso dificulta ataques de força bruta
+3. **IV (Vetor de Inicialização)**: Gera outro valor aleatório (16 bytes) para garantir que textos iguais produzam resultados diferentes
+4. **Criptografia AES-256**: Usa o algoritmo de criptografia padrão mundial para proteger o texto
+5. **Codificação Base64**: Converte os dados binários em texto legível para facilitar cópia e compartilhamento
+
+### 2. **Processo de Descriptografia**
+Quando você cola um texto criptografado e a senha correta:
+
+```
+Texto criptografado + Senha → Extrai salt/IV → AES-256 → Texto original
+```
+
+**O processo reverso:**
+1. **Decodificação Base64**: Converte o texto de volta para dados binários
+2. **Extração**: Separa o salt, IV e texto criptografado
+3. **Derivação da Chave**: Reconstrói a mesma chave usando a senha e o salt
+4. **Descriptografia AES-256**: Recupera o texto original
+5. **Validação**: Se a senha estiver errada, o resultado será inválido
+
+## 🛡️ Recursos de Segurança
+
+### **AES-256 (Advanced Encryption Standard)**
+- Mesmo padrão usado por governos e bancos
+- Chave de 256 bits - são 2²⁵⁶ combinações possíveis
+- Praticamente impossível de quebrar por força bruta
+
+### **PBKDF2 (Password-Based Key Derivation Function)**
+- 100.000 iterações de hash SHA-256
+- Aumenta drasticamente o tempo necessário para tentativas de senha
+- Protege contra ataques de dicionário
+
+### **Salt Aleatório**
+- Cada criptografia usa um salt diferente
+- Mesmo textos idênticos com mesma senha geram resultados diferentes
+- Impede identificação de padrões
+
+### **IV (Vetor de Inicialização)**
+- Garante que blocos idênticos no texto gerem saídas diferentes
+- Adiciona mais uma camada de segurança
+
+## 💻 Interface do Usuário
+
+### **Seção de Criptografia**
+1. **Campo "Digite o texto"**: Insira a mensagem que deseja proteger
+2. **Campo "Senha"**: Crie uma senha forte (quanto mais complexa, melhor)
+3. **Botão "Criptografar"**: Processa e gera o texto protegido
+4. **Campo "Texto Criptografado"**: Resultado pronto para compartilhar
+5. **Botão "Copiar"**: Copia o resultado para a área de transferência
+
+### **Seção de Descriptografia**
+1. **Campo "Cole o texto criptografado"**: Insira o texto que deseja decifrar
+2. **Campo "Senha"**: Digite a senha usada na criptografia
+3. **Botão "Descriptografar"**: Tenta recuperar o texto original
+4. **Campo "Texto Descriptografado"**: Mostra o resultado
+5. **Botão "Copiar"**: Copia o texto decifrado
+
+## 🎨 Recursos de Usabilidade
+
+### **Formas de Copiar Texto**
+- **Botão "Copiar"**: Clique no botão azul acima de cada campo
+- **Ctrl+C**: Selecione o texto e use o atalho do teclado
+- **Clique direito**: Menu de contexto com opção "Copiar"
+- **Clique no campo**: Seleciona automaticamente todo o texto
+
+### **Feedback Visual**
+- ✅ Sucesso: Fundo verde no campo de resultado
+- ❌ Erro: Fundo vermelho (senha incorreta)
+- 📋 Copiado: Botão muda para verde com "✓ Copiado!"
+
+### **Proteções**
+- **Tamanho fixo da janela**: Impede redimensionamento acidental
+- **Campos de senha**: Mostram apenas pontos (•) para privacidade
+- **Placeholders inteligentes**: Guias visuais que somem ao digitar
+
+## 🔄 Exemplo Prático
+
+### **Criptografando uma mensagem:**
+```
+Texto: "Olá, mundo secreto!"
+Senha: "MinhaSenha123"
+Resultado: "U2FsdGVkX1+8f5L3qWmR7nC2vB5yN3kP9..."
+```
+
+### **Descriptografando:**
+```
+Texto criptografado: "U2FsdGVkX1+8f5L3qWmR7nC2vB5yN3kP9..."
+Senha: "MinhaSenha123"
+Resultado: "Olá, mundo secreto!"
+```
+
+## 🚀 Casos de Uso
+
+1. **Mensagens privadas**: Envie textos seguros por WhatsApp, email, etc.
+2. **Senhas**: Armazene senhas de forma segura
+3. **Notas confidenciais**: Proteja informações sensíveis no computador
+4. **Compartilhamento seguro**: Envie dados criptografados por canais não seguros
+5. **Backup**: Proteja informações importantes antes de armazenar
+
+## ⚠️ Importante
+
+- **A senha é a chave**: Sem a senha correta, é impossível recuperar o texto
+- **Não há recuperação**: O aplicativo não guarda senhas
+- **Use senhas fortes**: Combine letras, números e símbolos
+- **Mantenha a senha segura**: Se perder a senha, o texto fica inacessível permanentemente
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Python + Tkinter**: Interface gráfica
+- **Cryptography**: Biblioteca de criptografia
+- **AES-256-CFB**: Algoritmo de criptografia
+- **PBKDF2-HMAC-SHA256**: Derivação de chave
+- **Base64**: Codificação para texto
+
+O aplicativo oferece segurança bancária com a simplicidade de um bloco de notas, permitindo que qualquer pessoa proteja suas informações de forma rápida e eficiente! 🔒
