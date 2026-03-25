@@ -1,0 +1,273 @@
+# 📋 Explicação do Gerenciador de Prontuários
+
+## 🎯 Visão Geral
+O **Gerenciador de Prontuários** é um aplicativo desktop completo para criar, organizar, salvar e proteger documentos estruturados. É como um processador de texto especializado com recursos de segurança avançados!
+
+---
+
+## 🏗️ Arquitetura do Sistema
+
+### 1. **Estrutura de Dados Principal**
+```python
+self.data = {
+    'title': 'Novo Prontuário',      # Título do documento
+    'description': '',                # Descrição geral
+    'sections': []                    # Lista de seções
+}
+```
+
+Cada seção contém:
+```python
+{
+    'title': 'Título da Seção',
+    'titleFormat': 'h1',  # h1, h2 ou p
+    'content': 'Conteúdo da seção...'
+}
+```
+
+### 2. **Formatação Hierárquica**
+O sistema suporta três níveis de formatação:
+- **h1 (Título Principal)**: Formato em negrito, tamanho 14, cor azul escuro
+- **h2 (Subseção)**: Formato em negrito, tamanho 12, cor azul claro
+- **p (Parágrafo)**: Texto normal, tamanho 11, cor cinza
+
+---
+
+## 🔧 Componentes Principais
+
+### **Interface do Usuário**
+
+#### 1. **Área de Informações do Prontuário**
+- **Campo Título**: Define o nome do documento
+- **Campo Descrição**: Texto descritivo do conteúdo
+
+#### 2. **Área de Adição de Seções**
+- **Título da seção**: Nome da seção a ser adicionada
+- **Formato**: Dropdown com opções de formatação
+- **Conteúdo**: Área de texto para o conteúdo da seção
+- **Botão "Adicionar Seção"**: Insere uma nova seção
+
+#### 3. **Lista de Seções**
+- Exibe todas as seções do prontuário
+- Cada seção tem um botão "Remover" individual
+- Visualização em scroll para documentos longos
+
+#### 4. **Botões de Ação**
+- **Salvar**: Salva em formato JSON (não criptografado)
+- **Salvar Criptografado**: Salva com proteção por senha
+- **Abrir**: Carrega arquivo JSON
+- **Abrir Criptografado**: Carrega arquivo criptografado
+- **Imprimir**: Gera visualização para impressão
+
+---
+
+## 🔐 Mecanismos de Segurança
+
+### **Criptografia AES-256**
+
+```python
+# 1. Derivação da chave a partir da senha
+key = hashlib.sha256(password.encode()).digest()
+
+# 2. Conversão para formato compatível com Fernet
+fernet_key = base64.urlsafe_b64encode(key[:32])
+
+# 3. Criptografia dos dados
+cipher = Fernet(fernet_key)
+encrypted_data = cipher.encrypt(json_data.encode('utf-8'))
+```
+
+**Como funciona:**
+1. A senha do usuário é convertida em uma chave de 256 bits usando SHA-256
+2. A chave é codificada em Base64 (formato exigido pelo Fernet)
+3. Os dados JSON são criptografados usando AES-256 em modo CBC
+4. O resultado é salvo como arquivo binário (`.enc`)
+
+### **Comparação de Segurança**
+
+| Recurso | Cripto Mobile | Prontuário Manager |
+|---------|--------------|-------------------|
+| Algoritmo | AES-256-CFB | AES-256 (Fernet) |
+| Derivação | PBKDF2 (100k iterações) | SHA-256 (1 iteração) |
+| Salt | Aleatório (16 bytes) | Não possui |
+| IV | Aleatório (16 bytes) | Automático (Fernet) |
+| Formato | Base64 + Salt + IV + Dados | Formato binário Fernet |
+
+---
+
+## 📁 Formatos de Arquivo
+
+### **JSON Normal (`.json`)**
+```json
+{
+  "title": "Prontuário do Paciente",
+  "description": "Histórico médico completo",
+  "sections": [
+    {
+      "title": "Dados Pessoais",
+      "titleFormat": "h1",
+      "content": "Nome: João Silva\nIdade: 35 anos"
+    }
+  ]
+}
+```
+- **Vantagem**: Legível por humanos, editável em qualquer editor de texto
+- **Desvantagem**: Sem proteção, qualquer pessoa pode ler
+
+### **Arquivo Criptografado (`.enc`)**
+- **Formato**: Dados binários
+- **Proteção**: Senha necessária para abrir
+- **Vantagem**: Segurança máxima
+- **Desvantagem**: Não é legível diretamente
+
+---
+
+## 🎨 Recursos de Usabilidade
+
+### **Atalhos de Teclado**
+- **Ctrl+N**: Novo prontuário
+- **Ctrl+O**: Abrir arquivo
+- **Ctrl+S**: Salvar arquivo
+
+### **Barra de Status**
+- Exibe mensagens de feedback
+- Mostra nome do arquivo atual
+- Indica operações em andamento
+
+### **Visualização de Impressão**
+- Janela separada com formatação otimizada
+- Texto pré-formatado para impressão
+- Botão de impressão integrado
+
+---
+
+## 🔄 Fluxo de Trabalho
+
+### **Criando um Novo Prontuário**
+1. Clique em "Arquivo" → "Novo Prontuário" (ou Ctrl+N)
+2. Digite o título e descrição
+3. Adicione seções com título, formato e conteúdo
+4. Salve quando terminar
+
+### **Salvando com Segurança**
+1. Digite uma senha no campo "Senha para criptografia"
+2. Clique em "Salvar Criptografado"
+3. Escolha o local e nome do arquivo
+4. O arquivo será salvo com extensão `.enc`
+
+### **Abrindo Arquivo Protegido**
+1. Digite a senha no campo correspondente
+2. Clique em "Abrir Criptografado"
+3. Selecione o arquivo `.enc`
+4. O sistema descriptografa e carrega automaticamente
+
+---
+
+## 🛡️ Limitações de Segurança
+
+### **Pontos Fracos do Sistema Atual**
+1. **Derivação de chave simples**: Apenas 1 iteração de SHA-256 (vulnerável a ataques de força bruta)
+2. **Sem salt**: Mesma senha sempre gera mesma chave
+3. **Fernet padrão**: Usa implementação fixa sem personalização
+
+### **Melhorias Sugeridas**
+```python
+# Melhor implementação (como no Cripto Mobile)
+import os
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+# Gerar salt aleatório
+salt = os.urandom(16)
+
+# Derivação segura (100.000 iterações)
+kdf = PBKDF2HMAC(
+    algorithm=hashes.SHA256(),
+    length=32,
+    salt=salt,
+    iterations=100000
+)
+key = kdf.derive(password.encode())
+```
+
+---
+
+## 💡 Casos de Uso
+
+### **Área da Saúde**
+- Prontuários de pacientes
+- Histórico de tratamentos
+- Relatórios médicos confidenciais
+
+### **Área Jurídica**
+- Processos e petições
+- Contratos e documentos legais
+- Informações de clientes
+
+### **Educação**
+- Planos de aula
+- Fichas de alunos
+- Relatórios de avaliação
+
+### **Pessoal**
+- Diário pessoal
+- Projetos e ideias
+- Organização de tarefas
+
+---
+
+## 🚀 Funcionalidades Avançadas
+
+### **Gerenciamento de Seções**
+- **Adição dinâmica**: Seções podem ser adicionadas em qualquer ordem
+- **Remoção individual**: Cada seção tem seu próprio botão de remover
+- **Formatação visual**: Diferenciação hierárquica por cores e fontes
+
+### **Barra de Ferramentas**
+- Botões de ação principais sempre visíveis
+- Indicadores visuais de operações
+- Feedback instantâneo de ações
+
+### **Manipulação de Arquivos**
+- **Salvamento automático**: Mantém o arquivo atual em memória
+- **"Salvar Como"**: Permite criar cópias
+- **Indicador de arquivo**: Título da janela mostra o nome do arquivo
+
+---
+
+## 🔧 Tecnologias Utilizadas
+
+| Componente | Biblioteca | Função |
+|-----------|-----------|---------|
+| Interface | Tkinter/ttk | GUI completa |
+| Criptografia | cryptography.fernet | AES-256 |
+| Estrutura de dados | JSON | Armazenamento |
+| Hash | hashlib | Derivação de chave |
+| Codificação | base64 | Formatação de chaves |
+
+---
+
+## 📊 Comparativo com Cripto Mobile
+
+| Funcionalidade | Cripto Mobile | Prontuário Manager |
+|---------------|--------------|-------------------|
+| Propósito | Criptografia de texto simples | Gerenciamento de documentos estruturados |
+| Estrutura | Texto único | Múltiplas seções formatadas |
+| Segurança | Alta (PBKDF2 + Salt) | Média (SHA-256 simples) |
+| Impressão | Não | Sim, com visualização |
+| Exportação | Copiar texto | Salvar em JSON/ENC |
+| Formatação | Nenhuma | 3 níveis hierárquicos |
+| Complexidade | Simples | Complexa (gerenciamento completo) |
+
+---
+
+## 🎯 Conclusão
+
+O **Gerenciador de Prontuários** é uma ferramenta robusta que combina:
+- **Organização estruturada** de documentos
+- **Segurança opcional** com criptografia
+- **Interface intuitiva** para usuários
+- **Flexibilidade** de formatos de arquivo
+
+Enquanto o Cripto Mobile foca em proteger textos individuais, este aplicativo oferece um sistema completo para criar, organizar e proteger documentos complexos com múltiplas seções e formatação hierárquica.
+
+**Ideal para profissionais** que precisam manter registros organizados e seguros! 📋🔒
